@@ -1,0 +1,21 @@
+aes-crypto-api-iface (0.0.1-0) unstable; urgency=low
+  2016/12/15
+    + aes-crypto-api-iface.c:
+        Initial version of AES-accelerator driver that supports
+        in-kernel Crypto API interface.
+
+        It supports only decryption now.     
+
+        It does not provide multi-block cipher and provides only 
+        single block cipher (see CRYPTO_ALG_TYPE_CIPHER in
+        include/linux/crypto.h)
+ 
+        See README.
+      [dg, io]  
+
+    ! aes-accelerator.c:
+        Delete old version.
+      [dg, io]  
+        
+
+ -- Denis Gabidullin <d.gabidullin@metrotek.spb.ru>  Thu, 15 Dec 2016 14:50:40 +0300

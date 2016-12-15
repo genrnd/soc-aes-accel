@@ -1,13 +1,17 @@
-aes-accelerator
-===============
+aes-crypto-api-iface
+====================
 
 This directory contains sources of driver that we use to test FPGA firware
 providing AES decryption hardware accelerator.
 
+It uses standard kernel Crypto-API interface. See:
+  https://kernel.readthedocs.io/en/sphinx-samples/crypto-API.html
+
+
 FILES
 -----
 
- * `aes-accelerator.c` -- the driver source code
+ * `aes-crypto-api-iface.c` -- the driver source code
  * `socfpga_cyclone5_etln.dts` -- sample DTS file containing decription of
    platform device handled by the driver
 
@@ -31,7 +35,7 @@ INSTALL
 -------
 
 After running the `make` described in the previous section you will obtain
-`aes-accelerator.ko` in the current directory. You may want to place it in
+`aes-crypto-api-iface.ko` in the current directory. You may want to place it in
 `/usr/lib/modules/<kernel-version>/` on target machine and run `depmod` making
 the module load automatically once the kernel finds appropriate platform
 device. Or instead you can simply copy it to whatever directory on the target
@@ -57,56 +61,59 @@ STC Metortek's SoC-based devices are shipped with custom fpga manager driver
 fpga manager driver requires the FPGA firmware to have special capability
 called 'features'.
 
-At the moment of writing `aes-accelerator` driver the firmware providing
+At the moment of writing `aes-crypto-api-iface` driver the firmware providing
 hardware AES decryption accelerator device did not have 'features'. In order to
 run the firmware properly you have to disable the device handled by Metrotek's
 FPGA manager and enable Altera FPGA manager's device.
 
 The task of enabling proper FPGA manager and disabling the other as well as
-describing device tree node for the device handled by `aes-accelerator` are
+describing device tree node for the device handled by `aes-crypto-api-iface` are
 solved in `socfpga_cyclone5_etln.dts` DTS for ETLN that can be found in this
 directory. Make sure you boot with proper DTS.
 
 USAGE
 -----
 
-Once you have compiled and installed the `aes-accelerator`, installed the
+Once you have compiled and installed the `aes-crypto-api-iface`, installed the
 proper FPGA firmware and booted the machine with proper DTS you may load the
-`aes-accelerator` module and start having fun.
+`aes-crypto-api-iface` module and start having fun.
 
-Once the module is loaded (manually by running `insmod ./aes-accelerator.ko` or
-automatically by the kernel if you installed the module into
-`/lib/firmware/<kernel-verison>/`) it creates new directory
-`/sys/class/encryptor/aes` with the following files in it:
+Once loaded the module registers an in-kernel cryptographic cipher that can be
+used by various consumers mostly in kernel. Userspace use our hardware cipher
+through interfaces like `AF_ALG` socket family or `cryptodev.ko` out-of-tree
+module.
 
- * `key` -- Key that will be used for decryption (Write-only).
- * `ciphertext` -- Ciphertext to decrypt (Write-only).
- * `plaintext` -- Plaintext that was obtained by decrypting `ciphertext` using
-   `key` (Read-only).
-
-The hardware implements AES-128 so you must write exactly 16 bytes into
-`ciphertext` and `key`.
-
-The typical usage of the drvier could look like this:
+Minimal usage example of our module is presented below. It uses openssl in
+conjunction with `cryptodev.ko` to decrypt using hardware acceleration and
+compare with reference result. The openssl must be compiled with cryptodev
+engine support:
+  http://forum.doozan.com/read.php?2,18152
 
 ```shell
-# Genarate random ciphertext and key
-dd bs=1 count=16 if=/dev/urandom of=ciphertext
+# Ensure that our Crypto device is registered:
+cat /proc/crypto | grep -A 10 fpga
+
+# Make tmpfs
+mkdir tmpfs
+mount -t tmpfs -o size=300m,nr_inodes=100,mode=0700 tmpfs tmpfs/
+cf tmpfs
+
+# Genarate random ciphertext, key and initialization vector
+dd bs=16000 count=1000 if=/dev/urandom of=ciphertext
 dd bs=1 count=16 if=/dev/urandom of=key
+dd bs=1 count=16 if=/dev/urandom of=iv
 
-# Pass them to the device
-cat ciphertext > /sys/class/encryptor/aes/ciphertext
-cat key > /sys/class/encryptor/aes/key
+# Decrypt ciphertext without FPGA acceleration (make sure that our module is not loaded)
+time openssl aes-128-cbc -d -in ciphertext -out nofpga_plaintext -K $(xxd -p key) -nopad -iv $(xxd -p iv)
 
-# Get the resulting plaintext
-cat /sys/class/encryptor/aes/plaintext > hardware_plaintext
+# Load modules
+insmod <your-path>/cryptodev.ko
+insmod <your-path>/aes-crypto-api-iface.ko
 
-# Obtain the reference result
-openssl aes-128-ecb -d -in ciphertext -out openssl_plaintext -K $(xxd -p key) -nopad
+# Decrypt ciphertext with FPGA acceleration
+time openssl aes-128-cbc -d -in ciphertext -out fpga_plaintext -K $(xxd -p key) -nopad -iv $(xxd -p iv)
 
-# Make sure the hardware decrypts the data correctly
-diff openssl_plaintext hardware_plaintext
+# Compare results
+diff fpga_plaintext nofpga_plaintext
 ```
 
-Note that each read of `plaintext` file triggers hardware decryption even when
-the `ciphertext` and `key` weren't changed since the last decryption.

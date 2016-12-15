@@ -4,11 +4,15 @@
 #include <linux/of.h>
 #include <linux/printk.h>
 #include <linux/device.h>
+#include <crypto/algapi.h>
+#include <crypto/aes.h>
+#include <crypto/padlock.h>
 
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
 
 #include <linux/delay.h>
+#include <linux/jiffies.h>
 
 #include <linux/kdev_t.h>
 
@@ -18,9 +22,8 @@
 #define AES_SIZE  (7 * 4)
 
 #define AES_BLOCK_SIZE 16
+#define FPGA_AUXDATA    8
 #define AES_KEY_SIZE   (32 * 4 / 8)
-
-static struct class *encryptor_class;
 
 struct aes_regs {
 	u32 main_ctrl;
@@ -31,6 +34,7 @@ struct aes_regs {
 } __attribute__((__packed__));
 
 struct aes_priv {
+        uint32_t old_seq;
 	struct device *dev;
 	struct aes_regs __iomem *regs;
 
@@ -38,25 +42,21 @@ struct aes_priv {
 
 	dma_addr_t cipher_dma, plain_dma;
 };
+        
+struct aes_priv *priv;
 
-static ssize_t key_store(struct device *dev, struct device_attribute *attr,
-		const char *buf, size_t count)
+static int fpga_setkey(struct crypto_tfm *tfm, const u8 *in_key, unsigned int key_len)
 {
-	struct aes_priv *priv;
 	const uint32_t *w_buf;
 
-	priv = dev_get_drvdata(dev);
-
-	dev_info(dev, "key = %s", buf);
-
-	if (count != AES_KEY_SIZE) {
-		dev_warn(dev, "Provided key of length %u when %u expected",
-			(unsigned int) count, (unsigned int) AES_KEY_SIZE);
+	if (key_len != AES_KEY_SIZE) {
+		printk("Provided key of length %u when %u expected\n",
+			(unsigned int) key_len, (unsigned int) AES_KEY_SIZE);
 		return -EINVAL;
 	}
 
-	w_buf = (const uint32_t *)buf;
-
+	w_buf = (const uint32_t *)in_key;
+        
 	iowrite32(w_buf[0], priv->regs->key);
 	iowrite32(w_buf[1], priv->regs->key + 1);
 	iowrite32(w_buf[2], priv->regs->key + 2);
@@ -65,94 +65,91 @@ static ssize_t key_store(struct device *dev, struct device_attribute *attr,
 	iowrite32(0x4, &priv->regs->main_ctrl);
 	iowrite32(0x0, &priv->regs->main_ctrl);
 
-	dev_info(dev, "key written successfully");
-
-	return count;
+        return 0;
 }
-DEVICE_ATTR_WO(key);
 
-static ssize_t ciphertext_store(struct device *dev, struct device_attribute *attr,
-		const char *buf, size_t count)
+static void fpga_encrypt(struct crypto_tfm *tfm, u8 *dst, const u8 *src)
 {
-	struct aes_priv *priv;
+        //struct aes_priv *priv = crypto_tfm_ctx(tfm);
+        //
+	//printk("fpga_encrypt\n");
 
-	priv = dev_get_drvdata(dev);
+}
 
-	dev_info(dev, "ciphertext = %s", buf);
+static void fpga_decrypt(struct crypto_tfm *tfm, u8 *dst, const u8 *src)
+{
+        //struct aes_priv *priv = crypto_tfm_ctx(tfm);
+        unsigned long start;
+        uint32_t *seq;
 
-	if (count != AES_BLOCK_SIZE) {
-		dev_warn(dev, "Got %u bytes of ciphertext when expected %u",
-			(unsigned int) count, (unsigned int) AES_BLOCK_SIZE);
-		return -EINVAL;
-	}
+	//printk("fpga_decrypt\n");
 
-	dma_sync_single_for_cpu(priv->dev, priv->cipher_dma, AES_BLOCK_SIZE, DMA_TO_DEVICE);
-
-	memcpy(priv->cipher_buf, buf, AES_BLOCK_SIZE);
-
+	memcpy(priv->cipher_buf, src, AES_BLOCK_SIZE);
 	dma_sync_single_for_device(priv->dev, priv->cipher_dma, AES_BLOCK_SIZE, DMA_TO_DEVICE);
-
-	return count;
-}
-DEVICE_ATTR_WO(ciphertext);
-
-static ssize_t plaintext_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct aes_priv *priv;
-
-	priv = dev_get_drvdata(dev);
 
 	iowrite32(0x1, &priv->regs->main_ctrl);
 
-	//msleep(1);
+        seq = (uint32_t *) (priv->plain_buf + AES_BLOCK_SIZE);
 
-	dma_sync_single_for_cpu(priv->dev, priv->plain_dma, AES_BLOCK_SIZE, DMA_FROM_DEVICE);
+        start = jiffies;
+        while (1) {
+          dma_sync_single_for_cpu(priv->dev, priv->plain_dma, AES_BLOCK_SIZE, DMA_FROM_DEVICE);
+          if (*seq != priv->old_seq)
+            break;
+          BUG_ON(time_is_before_jiffies(start + HZ));
+        }
 
-	memcpy(buf, priv->plain_buf, AES_BLOCK_SIZE);
+        priv->old_seq = *seq;
 
-	dma_sync_single_for_device(priv->dev, priv->plain_dma, AES_BLOCK_SIZE, DMA_FROM_DEVICE);
-
-	return AES_BLOCK_SIZE;
+	memcpy(dst, priv->plain_buf, AES_BLOCK_SIZE);
 }
-DEVICE_ATTR_RO(plaintext);
 
-static const struct attribute *aes_attrs[] = {
-	&dev_attr_key.attr,
-	&dev_attr_ciphertext.attr,
-	&dev_attr_plaintext.attr,
-	NULL
+
+static struct crypto_alg fpga_alg = {
+  .cra_name   = "aes",
+  .cra_driver_name  = "aes-fpga",
+
+  // XXX:
+  //   Larger number -- higher priority :)
+  .cra_priority   = 1000,
+  .cra_flags      = CRYPTO_ALG_TYPE_CIPHER,
+  .cra_blocksize  = AES_BLOCK_SIZE,
+  .cra_ctxsize    = sizeof (struct aes_priv),
+  .cra_alignmask  = 0,
+  .cra_module     = THIS_MODULE,
+  .cra_u         = {
+    .cipher = {
+      .cia_min_keysize  = AES_KEY_SIZE,
+      .cia_max_keysize  = AES_KEY_SIZE,
+      .cia_setkey   =   fpga_setkey,
+      .cia_encrypt    = fpga_encrypt,
+      .cia_decrypt    = fpga_decrypt 
+    } 
+  }
 };
 
-static const struct attribute_group aes_attr_group = {
-	.attrs = (struct attribute **) aes_attrs,
-};
 
 static int aes_probe(struct platform_device *pdev)
 {
 	int err;
-	struct aes_priv *priv;
-	struct device *dev;
+	//struct aes_priv *priv;
 
 	dev_info(&pdev->dev, "probing");
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
 	BUG_ON(!priv);
 
-	dev = device_create(encryptor_class, &pdev->dev, MKDEV(0, 0), NULL,
-			"aes");
-	BUG_ON(IS_ERR(priv->dev));
-
-	priv->dev = dev;
-	dev_set_drvdata(dev, priv);
+	priv->dev = &pdev->dev;
 	platform_set_drvdata(pdev, priv);
-
-	dev_info(dev, "device created");
 
 	/* Allocate both buffers */
 	priv->cipher_buf = kzalloc(AES_BLOCK_SIZE, GFP_KERNEL);
 	BUG_ON(!priv->cipher_buf);
-	priv->plain_buf = kzalloc(AES_BLOCK_SIZE, GFP_KERNEL);
+	priv->plain_buf = kzalloc(AES_BLOCK_SIZE + FPGA_AUXDATA, GFP_KERNEL);
 	BUG_ON(!priv->plain_buf);
+
+        priv->old_seq = -1;
+        *(uint32_t *)(priv->plain_buf + AES_BLOCK_SIZE) = -1;
 
 	priv->regs = ioremap(AES_BASE, AES_SIZE);
 
@@ -170,10 +167,8 @@ static int aes_probe(struct platform_device *pdev)
 
 	iowrite32(priv->plain_dma, &priv->regs->dma_write);
 
-	err = sysfs_create_group(&dev->kobj, &aes_attr_group);
+        err = crypto_register_alg(&fpga_alg);
 	BUG_ON(err);
-
-	dev_info(dev, "files created");
 
 	return 0;
 }
@@ -184,8 +179,8 @@ static int aes_remove(struct platform_device *pdev)
 
 	priv = platform_get_drvdata(pdev);
 
-	device_unregister(priv->dev);
-
+        crypto_unregister_alg(&fpga_alg);
+        
 	iounmap(priv->regs);
 
 	dma_unmap_single(&pdev->dev, priv->cipher_dma, AES_BLOCK_SIZE, DMA_TO_DEVICE);
@@ -218,10 +213,6 @@ static int aes_init(void)
 {
 	int err;
 
-	encryptor_class = class_create(THIS_MODULE, "encryptor");
-	BUG_ON(IS_ERR(encryptor_class));
-	pr_info("class created\n");
-
 	err = platform_driver_register(&aes_drv);
 	BUG_ON(err);
 
@@ -232,11 +223,10 @@ module_init(aes_init);
 static void aes_exit(void)
 {
 	platform_driver_unregister(&aes_drv);
-
-	class_destroy(encryptor_class);
 	pr_info("class destroyed\n");
 }
 module_exit(aes_exit);
 
+MODULE_AUTHOR("Denis Gabidullin");
 MODULE_AUTHOR("Ivan Oleynikov");
 MODULE_LICENSE("GPL");
