@@ -79,9 +79,9 @@ proper FPGA firmware and booted the machine with proper DTS you may load the
 `aes-crypto-api-iface` module and start having fun.
 
 Once loaded the module registers an in-kernel cryptographic cipher that can be
-used by various consumers mostly in kernel. Userspace use our hardware cipher
-through interfaces like `AF_ALG` socket family or `cryptodev.ko` out-of-tree
-module.
+used by various consumers mostly in kernel. Userspace can put our hardware
+cipher to use through interfaces like `AF_ALG` socket family [2] or
+`cryptodev.ko` out-of-tree module [1].
 
 Minimal usage example of our module is presented below. It uses openssl in
 conjunction with `cryptodev.ko` to decrypt using hardware acceleration and
@@ -118,3 +118,12 @@ time openssl aes-128-cbc -d -in ciphertext -out fpga_plaintext -K $(xxd -p key) 
 diff fpga_plaintext nofpga_plaintext
 ```
 
+The example above insmod's and rmmod's modules to switch between hardware and
+software encryption. We hope that there is a more convenient way to achieve
+this, but it is not known to us.
+
+SEE ALSO
+--------
+
+ 1. https://github.com/cryptodev-linux/cryptodev-linux
+ 2. https://kernel.readthedocs.io/en/sphinx-samples/crypto-API.html
