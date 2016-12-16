@@ -106,26 +106,26 @@ static void fpga_decrypt(struct crypto_tfm *tfm, u8 *dst, const u8 *src)
 
 
 static struct crypto_alg fpga_alg = {
-  .cra_name   = "aes",
-  .cra_driver_name  = "aes-fpga",
+	.cra_name   = "aes",
+	.cra_driver_name  = "aes-fpga",
 
-  // XXX:
-  //   Larger number -- higher priority :)
-  .cra_priority   = 1000,
-  .cra_flags      = CRYPTO_ALG_TYPE_CIPHER,
-  .cra_blocksize  = AES_BLOCK_SIZE,
-  .cra_ctxsize    = sizeof (struct aes_priv),
-  .cra_alignmask  = 0,
-  .cra_module     = THIS_MODULE,
-  .cra_u         = {
-    .cipher = {
-      .cia_min_keysize  = AES_KEY_SIZE,
-      .cia_max_keysize  = AES_KEY_SIZE,
-      .cia_setkey   =   fpga_setkey,
-      .cia_encrypt    = fpga_encrypt,
-      .cia_decrypt    = fpga_decrypt 
-    } 
-  }
+	// XXX:
+	//   Larger number -- higher priority :)
+	.cra_priority   = 1000,
+	.cra_flags      = CRYPTO_ALG_TYPE_CIPHER,
+	.cra_blocksize  = AES_BLOCK_SIZE,
+	.cra_ctxsize    = sizeof (struct aes_priv),
+	.cra_alignmask  = 0,
+	.cra_module     = THIS_MODULE,
+	.cra_u         = {
+		.cipher = {
+			.cia_min_keysize  = AES_KEY_SIZE,
+			.cia_max_keysize  = AES_KEY_SIZE,
+			.cia_setkey   =   fpga_setkey,
+			.cia_encrypt    = fpga_encrypt,
+			.cia_decrypt    = fpga_decrypt
+		}
+	}
 };
 
 
