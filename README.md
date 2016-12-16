@@ -18,7 +18,7 @@ FILES
 BUILD
 -----
 
-Building the module providing driver is straingtforward:
+Building the module is straingtforward:
 
 ```shell
 make KDIR=path/to/prebuilt/kernel
@@ -103,7 +103,8 @@ dd bs=16000 count=1000 if=/dev/urandom of=ciphertext
 dd bs=1 count=16 if=/dev/urandom of=key
 dd bs=1 count=16 if=/dev/urandom of=iv
 
-# Decrypt ciphertext without FPGA acceleration (make sure that our module is not loaded)
+# Decrypt ciphertext without FPGA acceleration (make sure that
+# `aes-crypto-api-iface` and `cryptodev` modules are not loaded)
 time openssl aes-128-cbc -d -in ciphertext -out nofpga_plaintext -K $(xxd -p key) -nopad -iv $(xxd -p iv)
 
 # Load modules
