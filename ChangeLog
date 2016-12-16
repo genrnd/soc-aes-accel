@@ -1,4 +1,9 @@
 aes-crypto-api-iface (0.0.1-0) unstable; urgency=low
+  2016/12/16
+    + README.md:
+        Few minor changes of README
+      [io]
+
   2016/12/15
     + aes-crypto-api-iface.c:
         Initial version of AES-accelerator driver that supports
