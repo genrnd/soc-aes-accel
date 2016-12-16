@@ -42,7 +42,7 @@ struct aes_priv {
 
 	dma_addr_t cipher_dma, plain_dma;
 };
-        
+
 struct aes_priv *priv;
 
 static int fpga_setkey(struct crypto_tfm *tfm, const u8 *in_key, unsigned int key_len)
@@ -56,7 +56,7 @@ static int fpga_setkey(struct crypto_tfm *tfm, const u8 *in_key, unsigned int ke
 	}
 
 	w_buf = (const uint32_t *)in_key;
-        
+
 	iowrite32(w_buf[0], priv->regs->key);
 	iowrite32(w_buf[1], priv->regs->key + 1);
 	iowrite32(w_buf[2], priv->regs->key + 2);
@@ -180,7 +180,7 @@ static int aes_remove(struct platform_device *pdev)
 	priv = platform_get_drvdata(pdev);
 
         crypto_unregister_alg(&fpga_alg);
-        
+
 	iounmap(priv->regs);
 
 	dma_unmap_single(&pdev->dev, priv->cipher_dma, AES_BLOCK_SIZE, DMA_TO_DEVICE);
