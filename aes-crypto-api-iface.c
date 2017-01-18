@@ -298,7 +298,6 @@ int irq;
 static int aes_probe(struct platform_device *pdev)
 {
 	int err;
-	//struct aes_priv *priv;
 
 	dev_info(&pdev->dev, "probing");
 
@@ -306,7 +305,6 @@ static int aes_probe(struct platform_device *pdev)
 	BUG_ON(!priv);
 
 	priv->dev = &pdev->dev;
-	platform_set_drvdata(pdev, priv);
 
 	irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
 	BUG_ON(!irq);
@@ -338,10 +336,6 @@ static int aes_probe(struct platform_device *pdev)
 
 static int aes_remove(struct platform_device *pdev)
 {
-	struct aes_priv *priv;
-
-	priv = platform_get_drvdata(pdev);
-
 	crypto_unregister_alg(&fpga_alg);
 
 	free_irq(irq, priv);
