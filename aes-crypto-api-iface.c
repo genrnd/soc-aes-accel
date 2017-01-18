@@ -309,6 +309,7 @@ static int aes_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, priv);
 
 	irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
+	BUG_ON(!irq);
 
 	printk( "irq = %d\n", irq );
 
