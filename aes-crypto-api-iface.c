@@ -266,12 +266,12 @@ static void fpga_read_rx_report(struct netdma_rx_report *report)
 	unsigned int rx_report;
 
 	rx_report = ioread32(&priv->dma_regs->rx_report);
-	report->actual_bytes_transferred = 
+	report->actual_bytes_transferred =
 		(rx_report >> RX_REPORT_ACTUAL_BYTES_OFFSET) & RX_REPORT_ACTUAL_BYTES_MASK;
 }
 
 
-static irqreturn_t fpga_isr(int irq, void *dev_id)                                             
+static irqreturn_t fpga_isr(int irq, void *dev_id)
 {
 	struct netdma_rx_report report;
 
@@ -316,7 +316,7 @@ static int aes_probe(struct platform_device *pdev)
 	if (err) {
 		printk( "request_irq failed!" );
 		return -ENOMEM;
-	}  
+	}
 
 	priv->aes_regs = ioremap(AES_BASE, AES_SIZE);
 	priv->dma_regs = ioremap(DMA_BASE, DMA_SIZE);
