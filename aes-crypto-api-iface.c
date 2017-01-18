@@ -368,23 +368,7 @@ static struct platform_driver aes_drv = {
 	}
 };
 
-static int aes_init(void)
-{
-	int err;
-
-	err = platform_driver_register(&aes_drv);
-	BUG_ON(err);
-
-	return 0;
-}
-module_init(aes_init);
-
-static void aes_exit(void)
-{
-	platform_driver_unregister(&aes_drv);
-	pr_info("class destroyed\n");
-}
-module_exit(aes_exit);
+module_platform_driver(aes_drv);
 
 MODULE_AUTHOR("Denis Gabidullin");
 MODULE_AUTHOR("Ivan Oleynikov");
