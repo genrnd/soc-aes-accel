@@ -310,12 +310,6 @@ static int aes_probe(struct platform_device *pdev)
 
 	printk( "irq = %d\n", priv->irq);
 
-	err = request_irq(priv->irq, fpga_isr, IRQF_SHARED, "fpga-aes", priv);
-	if (err) {
-		printk( "request_irq failed!" );
-		return -ENOMEM;
-	}
-
 	priv->aes_regs = ioremap(AES_BASE, AES_SIZE);
 	priv->dma_regs = ioremap(DMA_BASE, DMA_SIZE);
 
@@ -326,6 +320,12 @@ static int aes_probe(struct platform_device *pdev)
 	iowrite32(6, &priv->dma_regs->control);
 
 	init_waitqueue_head(&priv->irq_queue);
+
+	err = request_irq(priv->irq, fpga_isr, IRQF_SHARED, "fpga-aes", priv);
+	if (err) {
+		printk( "request_irq failed!" );
+		return -ENOMEM;
+	}
 
 	err = crypto_register_alg(&fpga_alg);
 	BUG_ON(err);
