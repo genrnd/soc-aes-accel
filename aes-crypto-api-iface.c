@@ -60,6 +60,7 @@ struct aes_priv {
 	struct netdma_regs __iomem *dma_regs;
 	wait_queue_head_t irq_queue;
 	int irq_done;
+	int irq;
 };
 
 struct aes_priv *priv;
@@ -293,8 +294,6 @@ static irqreturn_t fpga_isr(int irq, void *dev_id)
 }
 
 
-int irq;
-
 static int aes_probe(struct platform_device *pdev)
 {
 	int err;
@@ -306,12 +305,12 @@ static int aes_probe(struct platform_device *pdev)
 
 	priv->dev = &pdev->dev;
 
-	irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
-	BUG_ON(!irq);
+	priv->irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
+	BUG_ON(!priv->irq);
 
-	printk( "irq = %d\n", irq );
+	printk( "irq = %d\n", priv->irq);
 
-	err = request_irq(irq, fpga_isr, IRQF_SHARED, "fpga-aes", priv);
+	err = request_irq(priv->irq, fpga_isr, IRQF_SHARED, "fpga-aes", priv);
 	if (err) {
 		printk( "request_irq failed!" );
 		return -ENOMEM;
@@ -338,7 +337,7 @@ static int aes_remove(struct platform_device *pdev)
 {
 	crypto_unregister_alg(&fpga_alg);
 
-	free_irq(irq, priv);
+	free_irq(priv->irq, priv);
 
 	iounmap(priv->aes_regs);
 	iounmap(priv->dma_regs);
