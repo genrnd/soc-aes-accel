@@ -180,6 +180,10 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 	int size[ MAX_DESC_CNT ];
 	dma_addr_t dma_dst[ MAX_DESC_CNT ], dma_src[ MAX_DESC_CNT ];
 	int desc_cnt;
+	int bytes_sent;
+	unsigned int old_nbytes;
+
+	old_nbytes = nbytes;
 
 	//printk("fpga_aes_dec start\n");
 
@@ -189,25 +193,24 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 	fpga_write_iv(walk.iv);
 
 	desc_cnt = 0;
+	bytes_sent = 0;
+	priv->irq_done = 0;
 
 	while ((nbytes = walk.nbytes)) {
+		int irq_en;
 
 		size[ desc_cnt ] = nbytes / 16 * 16;
+		bytes_sent += size[desc_cnt];
+
+		irq_en = bytes_sent == old_nbytes;
 
 		dma_src[ desc_cnt ] = dma_map_page(priv->dev, walk.src.phys.page,
 				walk.src.phys.offset, size[ desc_cnt ], DMA_TO_DEVICE);
 		dma_dst[ desc_cnt ] = dma_map_page(priv->dev, walk.dst.phys.page,
 				walk.dst.phys.offset, size[ desc_cnt ], DMA_FROM_DEVICE);
 
-		write_dst_desc(priv, dma_dst[ desc_cnt ], size[ desc_cnt ], 1);
+		write_dst_desc(priv, dma_dst[ desc_cnt ], size[ desc_cnt ], irq_en) ;
 		write_src_desc(priv, dma_src[ desc_cnt ], size[ desc_cnt ], 0);
-
-		priv->irq_done = 0;
-		err = wait_event_interruptible(priv->irq_queue, priv->irq_done == 1);
-		if( err ) {
-			printk( "wait_event_interruptible failed.\n" );
-			return err;
-		}
 
 		err = blkcipher_walk_done(desc, &walk, nbytes - size[ desc_cnt ]);
 
@@ -228,6 +231,11 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 
 	//for( i = 0; i < 10; i++ )
 	//  mdelay(5);
+	err = wait_event_interruptible(priv->irq_queue, priv->irq_done == 1);
+	if( err ) {
+		printk( "wait_event_interruptible failed.\n" );
+		return err;
+	}
 
 	for( i = 0; i < desc_cnt; i++ ) {
 		dma_unmap_page(priv->dev, dma_dst[ i ], size[ i ], DMA_FROM_DEVICE);
