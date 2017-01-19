@@ -61,10 +61,17 @@ struct aes_priv {
 	wait_queue_head_t irq_queue;
 	int irq_done;
 	int irq;
+
+	struct page *dst_page;
+	dma_addr_t dst_dma;
+	void *dst;
+
+	struct page *src_page;
+	dma_addr_t src_dma;
+	void *src;
 };
 
 struct aes_priv *priv;
-
 
 
 static int write_fpga_desc(struct aes_priv *priv, u32 dma_address, u16 length, u8 irq_is_en, u8 is_dst )
@@ -174,75 +181,53 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 		struct scatterlist *src,
 		unsigned int nbytes)
 {
-	struct blkcipher_walk walk;
 	int err;
-	int i;
-	int size[ MAX_DESC_CNT ];
-	dma_addr_t dma_dst[ MAX_DESC_CNT ], dma_src[ MAX_DESC_CNT ];
-	int desc_cnt;
-	int bytes_sent;
-	unsigned int old_nbytes;
+	struct scatterlist *i;
+	void *curr_ptr;
 
-	old_nbytes = nbytes;
+	BUG_ON(nbytes > PAGE_SIZE);
 
-	//printk("fpga_aes_dec start\n");
+	fpga_write_iv(desc->tfm->base.crt_u.blkcipher.iv);
 
-	blkcipher_walk_init(&walk, dst, src, nbytes);
-	err = blkcipher_walk_phys(desc, &walk);
-
-	fpga_write_iv(walk.iv);
-
-	desc_cnt = 0;
-	bytes_sent = 0;
 	priv->irq_done = 0;
 
-	while ((nbytes = walk.nbytes)) {
-		int irq_en;
+	/* Write ciphertext to be fetched by the hardware */
+	dma_sync_single_for_cpu(priv->dev, priv->src_dma, PAGE_SIZE, DMA_TO_DEVICE);
+	curr_ptr = priv->src;
+	for (i = src; i; i = scatterwalk_sg_next(i)) {
+		void *ptr = kmap_atomic(sg_page(i)) + i->offset;
 
-		size[ desc_cnt ] = nbytes / 16 * 16;
-		bytes_sent += size[desc_cnt];
+		memcpy(curr_ptr, ptr, i->length);
+		curr_ptr += i->length;
 
-		irq_en = bytes_sent == old_nbytes;
-
-		dma_src[ desc_cnt ] = dma_map_page(priv->dev, walk.src.phys.page,
-				walk.src.phys.offset, size[ desc_cnt ], DMA_TO_DEVICE);
-		dma_dst[ desc_cnt ] = dma_map_page(priv->dev, walk.dst.phys.page,
-				walk.dst.phys.offset, size[ desc_cnt ], DMA_FROM_DEVICE);
-
-		write_dst_desc(priv, dma_dst[ desc_cnt ], size[ desc_cnt ], irq_en) ;
-		write_src_desc(priv, dma_src[ desc_cnt ], size[ desc_cnt ], 0);
-
-		err = blkcipher_walk_done(desc, &walk, nbytes - size[ desc_cnt ]);
-
-		desc_cnt++;
-
-		if( desc_cnt > MAX_DESC_CNT ) {
-			printk( "Error: too many descriptors on decrypt\n" );
-			return -EINVAL;
-		}
+		kunmap_atomic(ptr - i->offset);
 	}
+	dma_sync_single_for_device(priv->dev, priv->src_dma, PAGE_SIZE, DMA_TO_DEVICE);
 
-	//for( i = 0; i < desc_cnt; i++ ) {
-	//  printk( "%d:\n", i );
-	//  printk( "  src dma = 0x%x\n", dma_src[ i ]  );
-	//  printk( "  dst dma = 0x%x\n", dma_dst[ i ]  );
-	//  printk( "  cnt     = %d\n", size[ i ] );
-	//}
+	/* Start decryption by writing descriptors */
+	write_dst_desc(priv, priv->dst_dma, nbytes, 1);
+	write_src_desc(priv, priv->src_dma, nbytes, 0);
 
-	//for( i = 0; i < 10; i++ )
-	//  mdelay(5);
+	/* Wait for completion interrupt */
 	err = wait_event_interruptible(priv->irq_queue, priv->irq_done == 1);
 	if( err ) {
 		printk( "wait_event_interruptible failed.\n" );
 		return err;
 	}
 
-	for( i = 0; i < desc_cnt; i++ ) {
-		dma_unmap_page(priv->dev, dma_dst[ i ], size[ i ], DMA_FROM_DEVICE);
-		dma_unmap_page(priv->dev, dma_src[ i ], size[ i ], DMA_TO_DEVICE);
-	}
+	/* Get the result returned from hardware */
+	dma_sync_single_for_cpu(priv->dev, priv->dst_dma, PAGE_SIZE, DMA_FROM_DEVICE);
+	curr_ptr = priv->dst;
+	for (i = dst; i; i = scatterwalk_sg_next(i)) {
+		void *ptr = kmap_atomic(sg_page(i)) + i->offset;
 
-	//printk("fpga_aes_dec end %d\n", err);
+		memcpy(ptr, curr_ptr, i->length);
+		curr_ptr += i->length;
+
+		kunmap_atomic(ptr - i->offset);
+	}
+	dma_sync_single_for_device(priv->dev, priv->dst_dma, PAGE_SIZE, DMA_FROM_DEVICE);
+
 	return err;
 }
 
@@ -321,6 +306,15 @@ static int aes_probe(struct platform_device *pdev)
 	priv->aes_regs = ioremap(AES_BASE, AES_SIZE);
 	priv->dma_regs = ioremap(DMA_BASE, DMA_SIZE);
 
+	priv->src = (void *)devm_get_free_pages(priv->dev, GFP_KERNEL, 0);
+	priv->dst = (void *)devm_get_free_pages(priv->dev, GFP_KERNEL, 0);
+
+	priv->src_page = virt_to_page(priv->src);
+	priv->dst_page = virt_to_page(priv->dst);
+
+	priv->src_dma = dma_map_page(priv->dev, priv->src_page, 0, PAGE_SIZE, DMA_TO_DEVICE);
+	priv->dst_dma = dma_map_page(priv->dev, priv->dst_page, 0, PAGE_SIZE, DMA_FROM_DEVICE);
+
 	iowrite32(0, &priv->aes_regs->main_ctrl);
 	iowrite32(1, &priv->aes_regs->main_ctrl);
 	iowrite32(0, &priv->aes_regs->main_ctrl);
@@ -346,6 +340,9 @@ static int aes_remove(struct platform_device *pdev)
 	crypto_unregister_alg(&fpga_alg);
 
 	free_irq(priv->irq, priv);
+
+	dma_unmap_page(priv->dev, priv->src_dma, PAGE_SIZE, DMA_TO_DEVICE);
+	dma_unmap_page(priv->dev, priv->dst_dma, PAGE_SIZE, DMA_FROM_DEVICE);
 
 	iounmap(priv->aes_regs);
 	iounmap(priv->dma_regs);
