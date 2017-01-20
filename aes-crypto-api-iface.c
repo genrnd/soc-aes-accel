@@ -205,8 +205,12 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 	dma_sync_single_for_device(priv->dev, priv->src_dma, PAGE_SIZE, DMA_TO_DEVICE);
 
 	/* Start decryption by writing descriptors */
-	write_dst_desc(priv, priv->dst_dma, nbytes, 1);
-	write_src_desc(priv, priv->src_dma, nbytes, 0);
+	err = write_dst_desc(priv, priv->dst_dma, nbytes, 1);
+	if (err)
+		return pr_err("write_dst_desc failed: %d\n", err), err;
+	err = write_src_desc(priv, priv->src_dma, nbytes, 0);
+	if (err)
+		return pr_err("write_src_desc failed: %d\n", err), err;
 
 	/* Wait for completion interrupt */
 	err = wait_event_interruptible(priv->irq_queue, priv->irq_done == 1);
