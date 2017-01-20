@@ -187,7 +187,7 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 
 	BUG_ON(nbytes > PAGE_SIZE);
 
-	fpga_write_iv(desc->tfm->base.crt_u.blkcipher.iv);
+	fpga_write_iv(desc->info);
 
 	priv->irq_done = 0;
 
