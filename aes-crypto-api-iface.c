@@ -239,6 +239,15 @@ static void sg_map_all(struct device *dev, struct scatterlist *sg,
 	}
 }
 
+static void sg_unmap_all(struct device *dev, struct scatterlist *sg,
+		enum dma_data_direction dir)
+{
+	struct scatterlist *i;
+
+	for (i = sg; i; i = sg_next(i))
+		dma_unmap_page(dev, i->dma_address, i->length, dir);
+}
+
 static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_dst)
 {
 	struct scatterlist *i;
