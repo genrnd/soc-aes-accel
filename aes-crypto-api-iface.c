@@ -246,13 +246,13 @@ struct crypto_alg fpga_alg = {
 	.cra_init = fpga_aes_init,
 	.cra_exit = fpga_aes_exit,
 	.cra_blkcipher = {
-			  .min_keysize = AES_KEY_SIZE,
-			  .max_keysize = AES_KEY_SIZE,
-			  .ivsize = AES_BLOCK_SIZE,
-			  .setkey = fpga_set_key,
-			  .encrypt = fpga_encrypt,
-			  .decrypt = fpga_decrypt,
-			  }
+		.min_keysize = AES_KEY_SIZE,
+		.max_keysize = AES_KEY_SIZE,
+		.ivsize = AES_BLOCK_SIZE,
+		.setkey = fpga_set_key,
+		.encrypt = fpga_encrypt,
+		.decrypt = fpga_decrypt,
+	}
 };
 
 static void fpga_read_rx_report(struct netdma_rx_report *report)
@@ -261,8 +261,8 @@ static void fpga_read_rx_report(struct netdma_rx_report *report)
 
 	rx_report = ioread32(&priv->dma_regs->rx_report);
 	report->actual_bytes_transferred =
-	    (rx_report >> RX_REPORT_ACTUAL_BYTES_OFFSET) &
-	    RX_REPORT_ACTUAL_BYTES_MASK;
+		(rx_report >> RX_REPORT_ACTUAL_BYTES_OFFSET) &
+		RX_REPORT_ACTUAL_BYTES_MASK;
 }
 
 static irqreturn_t fpga_isr(int irq, void *dev_id)
@@ -312,12 +312,10 @@ static int aes_probe(struct platform_device *pdev)
 	priv->src_page = virt_to_page(priv->src);
 	priv->dst_page = virt_to_page(priv->dst);
 
-	priv->src_dma =
-	    dma_map_page(priv->dev, priv->src_page, 0, PAGE_SIZE,
-			 DMA_TO_DEVICE);
-	priv->dst_dma =
-	    dma_map_page(priv->dev, priv->dst_page, 0, PAGE_SIZE,
-			 DMA_FROM_DEVICE);
+	priv->src_dma = dma_map_page(priv->dev, priv->src_page, 0, PAGE_SIZE,
+			DMA_TO_DEVICE);
+	priv->dst_dma = dma_map_page(priv->dev, priv->dst_page, 0, PAGE_SIZE,
+			DMA_FROM_DEVICE);
 
 	iowrite32(0, &priv->aes_regs->main_ctrl);
 	iowrite32(1, &priv->aes_regs->main_ctrl);
@@ -367,9 +365,9 @@ static struct platform_driver aes_drv = {
 	.probe = aes_probe,
 	.remove = aes_remove,
 	.driver = {
-		   .name = "aes",
-		   .of_match_table = aes_id_table,
-		   }
+		.name = "aes",
+		.of_match_table = aes_id_table,
+	}
 };
 
 module_platform_driver(aes_drv);
