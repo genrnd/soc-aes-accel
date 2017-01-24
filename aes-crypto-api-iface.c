@@ -208,7 +208,7 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 			}
 
 			memcpy(buff + buff_offset, sg_page_ptr + sg->offset + first_len, second_len);
-			memcpy(buff + buff_offset + first_len, sgn_page_ptr + sgn_offset, third_len);
+			memcpy(buff + buff_offset + first_len, sgn_page_ptr + sgn->offset, third_len);
 
 			sg_set_page(to, page, 0x10, buff_offset);
 			old_to = to;
