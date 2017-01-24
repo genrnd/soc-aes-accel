@@ -169,6 +169,63 @@ static int fpga_encrypt(struct blkcipher_desc *desc,
 	return 0;
 }
 
+static void sg_split_to_aligned(void *buff, struct page *page,
+		struct scatterlist *from, struct scatterlist *to)
+{
+	struct scatterlist *sg;
+	struct scatterlist *old_to;
+	ssize_t buff_offset;
+
+	buff_offset = 0;
+
+	for (sg = from; sg; sg = sg_next(sg)) {
+		if (!sg->length)
+			continue;
+
+		if (sg->length % 16) {
+			unsigned int first_len, second_len, third_len;
+			struct scatterlist *sgn;
+			void *sgn_page, *sg_page;
+
+			sgn = sg_next(sg);
+			sgn_page = kmap_atomic(sg_page(sgn));
+			BUG_ON(!sgn_page);
+
+			sg_page = kmap_atomic(sg_page(sg));
+			BUG_ON(!sg_page);
+
+			first_len = sg->length & ~0xf;
+			second_len = sg->length & 0xf;
+			third_len = 0x10 - second_len;
+
+			if (first_len) {
+				sg_set_page(to, sg_page(sg), first_len, sg->offset);
+				old_to = to;
+				to = sg_next(to);
+			}
+
+			memcpy(buff + buff_offset, sg_page + sg->offset + first_len, second_len);
+			memcpy(buff + buff_offset + first_len, sgn_page + sgn_offset, third_len);
+
+			sg_set_page(to, page, 0x10, buff_offset);
+			old_to = to;
+			to = sg_next(to);
+
+			sgn->offset += third_len;
+			sgn->length -= third_len;
+
+			kunmap(sg_page);
+			kunmap(sgn_page);
+		} else {
+			sg_set_page(to, sg_page(sg), sg->length, sg->offset);
+			old_to = to;
+			to = sg_next(to);
+		}
+	}
+
+	sg_mark_end(old_to);
+}
+
 #define MAX_DESC_CNT 16
 
 static int fpga_decrypt(struct blkcipher_desc *desc,
