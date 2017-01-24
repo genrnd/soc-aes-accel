@@ -280,28 +280,19 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 
 	priv->irq_done = 0;
 
-	/* Write ciphertext to be fetched by the hardware */
-	dma_sync_single_for_cpu(priv->dev, priv->src_dma, PAGE_SIZE,
-				DMA_TO_DEVICE);
-	curr_ptr = priv->src;
-	for (i = src; i; i = scatterwalk_sg_next(i)) {
-		void *ptr = kmap_atomic(sg_page(i)) + i->offset;
+	/* Align scatterlists provided to us */
+	sg_split_to_aligned(priv->src, priv->src_page, priv->src_dma, src,
+			priv->src_sg);
+	sg_split_to_aligned(priv->dst, priv->dst_page, priv->dst_dma, dst,
+			priv->dst_sg);
 
-		memcpy(curr_ptr, ptr, i->length);
-		curr_ptr += i->length;
-
-		kunmap_atomic(ptr - i->offset);
-	}
-	dma_sync_single_for_device(priv->dev, priv->src_dma, PAGE_SIZE,
-				   DMA_TO_DEVICE);
+	/* Map memory chunk for passing to DMA controller */
+	sg_map_all(priv->dev, priv->src_sg, DMA_TO_DEVICE);
+	sg_map_all(priv->dev, priv->dst_sg, DMA_FROM_DEVICE);
 
 	/* Start decryption by writing descriptors */
-	err = write_dst_desc(priv, priv->dst_dma, nbytes, 1);
-	if (err)
-		return pr_err("write_dst_desc failed: %d\n", err), err;
-	err = write_src_desc(priv, priv->src_dma, nbytes, 0);
-	if (err)
-		return pr_err("write_sr_desc failed: %d\n", err), err;
+	sg_feed_all(priv, priv->dst_sg, 1);
+	sg_feed_all(priv, priv->src_sg, 0);
 
 	/* Wait for completion interrupt */
 	err = wait_event_interruptible(priv->irq_queue, priv->irq_done == 1);
@@ -310,20 +301,9 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 		return err;
 	}
 
-	/* Get the result returned from hardware */
-	dma_sync_single_for_cpu(priv->dev, priv->dst_dma, PAGE_SIZE,
-				DMA_FROM_DEVICE);
-	curr_ptr = priv->dst;
-	for (i = dst; i; i = scatterwalk_sg_next(i)) {
-		void *ptr = kmap_atomic(sg_page(i)) + i->offset;
-
-		memcpy(ptr, curr_ptr, i->length);
-		curr_ptr += i->length;
-
-		kunmap_atomic(ptr - i->offset);
-	}
-	dma_sync_single_for_device(priv->dev, priv->dst_dma, PAGE_SIZE,
-				   DMA_FROM_DEVICE);
+	/* Unmap chunks back */
+	sg_unmap_all(priv->dev, priv->src_sg, DMA_TO_DEVICE);
+	sg_unmap_all(priv->dev, priv->dst_sg, DMA_FROM_DEVICE);
 
 	return err;
 }
