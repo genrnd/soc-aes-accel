@@ -67,6 +67,8 @@ struct aes_priv {
 	struct page *src_page;
 	dma_addr_t src_dma;
 	void *src;
+
+	struct scatterlist *sg;
 };
 
 struct aes_priv *priv;
@@ -374,6 +376,8 @@ static int aes_probe(struct platform_device *pdev)
 	priv->dst_dma = dma_map_page(priv->dev, priv->dst_page, 0, PAGE_SIZE,
 			DMA_FROM_DEVICE);
 
+	priv->sg = sg_kmalloc(20, GFP_KERNEL);
+
 	iowrite32(0, &priv->aes_regs->main_ctrl);
 	iowrite32(1, &priv->aes_regs->main_ctrl);
 	iowrite32(0, &priv->aes_regs->main_ctrl);
@@ -399,6 +403,8 @@ static int aes_remove(struct platform_device *pdev)
 	crypto_unregister_alg(&fpga_alg);
 
 	free_irq(priv->irq, priv);
+
+	sg_kfree(priv->sg, 20);
 
 	dma_unmap_page(priv->dev, priv->src_dma, PAGE_SIZE, DMA_TO_DEVICE);
 	dma_unmap_page(priv->dev, priv->dst_dma, PAGE_SIZE, DMA_FROM_DEVICE);
