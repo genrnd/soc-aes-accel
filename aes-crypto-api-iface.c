@@ -9,8 +9,9 @@
 #include <crypto/algapi.h>
 #include <crypto/aes.h>
 #include <crypto/padlock.h>
-#include <crypto/scatterwalk.h>
+#include <linux/scatterlist.h>
 
+#include <linux/highmem.h>
 #include <linux/dma-mapping.h>
 #include <linux/slab.h>
 
