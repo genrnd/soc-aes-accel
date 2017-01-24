@@ -207,8 +207,8 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 			sgn->offset += third_len;
 			sgn->length -= third_len;
 
-			kunmap(sg_page_ptr);
-			kunmap(sgn_page_ptr);
+			kunmap_atomic(sg_page_ptr);
+			kunmap_atomic(sgn_page_ptr);
 		} else {
 			sg_set_page(to, sg_page(sg), sg->length, sg->offset);
 			old_to = to;
