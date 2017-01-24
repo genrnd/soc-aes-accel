@@ -60,15 +60,15 @@ struct aes_priv {
 	int irq_done;
 	int irq;
 
+	struct scatterlist *dst_sg;
 	struct page *dst_page;
 	dma_addr_t dst_dma;
 	void *dst;
 
+	struct scatterlist *src_sg;
 	struct page *src_page;
 	dma_addr_t src_dma;
 	void *src;
-
-	struct scatterlist *sg;
 };
 
 struct aes_priv *priv;
@@ -376,7 +376,8 @@ static int aes_probe(struct platform_device *pdev)
 	priv->dst_dma = dma_map_page(priv->dev, priv->dst_page, 0, PAGE_SIZE,
 			DMA_FROM_DEVICE);
 
-	priv->sg = sg_kmalloc(20, GFP_KERNEL);
+	priv->src_sg = sg_kmalloc(20, GFP_KERNEL);
+	priv->dst_sg = sg_kmalloc(20, GFP_KERNEL);
 
 	iowrite32(0, &priv->aes_regs->main_ctrl);
 	iowrite32(1, &priv->aes_regs->main_ctrl);
@@ -404,7 +405,8 @@ static int aes_remove(struct platform_device *pdev)
 
 	free_irq(priv->irq, priv);
 
-	sg_kfree(priv->sg, 20);
+	sg_kfree(priv->src_sg, 20);
+	sg_kfree(priv->dst_sg, 20);
 
 	dma_unmap_page(priv->dev, priv->src_dma, PAGE_SIZE, DMA_TO_DEVICE);
 	dma_unmap_page(priv->dev, priv->dst_dma, PAGE_SIZE, DMA_FROM_DEVICE);
