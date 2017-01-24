@@ -171,7 +171,7 @@ static int fpga_encrypt(struct blkcipher_desc *desc,
 	return 0;
 }
 
-static void sg_split_to_aligned(void *buff, struct page *page,
+static void sg_split_to_aligned(void *buff, struct page *page, dma_addr_t dma
 		struct scatterlist *from, struct scatterlist *to)
 {
 	struct scatterlist *sg;
@@ -202,6 +202,7 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 
 			if (first_len) {
 				sg_set_page(to, sg_page(sg), first_len, sg->offset);
+				to->dma_address = sg->dma_address;
 				old_to = to;
 				to = sg_next(to);
 			}
@@ -210,6 +211,7 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 			memcpy(buff + buff_offset + first_len, sgn_page + sgn_offset, third_len);
 
 			sg_set_page(to, page, 0x10, buff_offset);
+			to->dma_address = dma + buff_offset;
 			old_to = to;
 			to = sg_next(to);
 
@@ -220,6 +222,7 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 			kunmap(sgn_page);
 		} else {
 			sg_set_page(to, sg_page(sg), sg->length, sg->offset);
+			to->dma_address = sg->dma_address;
 			old_to = to;
 			to = sg_next(to);
 		}
