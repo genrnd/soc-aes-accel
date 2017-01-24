@@ -102,18 +102,6 @@ static int write_fpga_desc(struct aes_priv *priv, u32 dma_address, u16 length,
 	return 0;
 }
 
-static int write_dst_desc(struct aes_priv *priv, u32 dma_address, u16 length,
-			  u8 irq_is_en)
-{
-	return write_fpga_desc(priv, dma_address, length, irq_is_en, 1);
-}
-
-static int write_src_desc(struct aes_priv *priv, u32 dma_address, u16 length,
-			  u8 irq_is_en)
-{
-	return write_fpga_desc(priv, dma_address, length, irq_is_en, 0);
-}
-
 static int fpga_set_key(struct crypto_tfm *tfm, const u8 *in_key,
 			unsigned int key_len)
 {
