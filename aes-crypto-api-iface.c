@@ -167,6 +167,8 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 	struct scatterlist *old_to;
 	ssize_t buff_offset;
 
+	old_to = NULL;
+
 	buff_offset = 0;
 
 	for (sg = from; sg; sg = sg_next(sg)) {
