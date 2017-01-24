@@ -260,8 +260,6 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 			struct scatterlist *src, unsigned int nbytes)
 {
 	int err;
-	struct scatterlist *i;
-	void *curr_ptr;
 
 	BUG_ON(nbytes > PAGE_SIZE);
 
