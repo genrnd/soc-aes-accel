@@ -61,12 +61,12 @@ struct aes_priv {
 	int irq_done;
 	int irq;
 
-	struct scatterlist *dst_sg;
+	struct sg_table dst_table;
 	struct page *dst_page;
 	dma_addr_t dst_dma;
 	void *dst;
 
-	struct scatterlist *src_sg;
+	struct sg_table src_table;
 	struct page *src_page;
 	dma_addr_t src_dma;
 	void *src;
@@ -262,26 +262,29 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 			struct scatterlist *src, unsigned int nbytes)
 {
 	int err;
+	struct scatterlist *src_sg;
+	struct scatterlist *dst_sg;
 
 	BUG_ON(nbytes > PAGE_SIZE);
+
+	src_sg = priv->src_table.sgl;
+	dst_sg = priv->dst_table.sgl;
 
 	fpga_write_iv(desc->info);
 
 	priv->irq_done = 0;
 
 	/* Align scatterlists provided to us */
-	sg_split_to_aligned(priv->src, priv->src_page, priv->src_dma, src,
-			priv->src_sg);
-	sg_split_to_aligned(priv->dst, priv->dst_page, priv->dst_dma, dst,
-			priv->dst_sg);
+	sg_split_to_aligned(priv->src, priv->src_page, src, src_sg);
+	sg_split_to_aligned(priv->dst, priv->dst_page, dst, dst_sg);
 
 	/* Map memory chunk for passing to DMA controller */
-	sg_map_all(priv->dev, priv->src_sg, DMA_TO_DEVICE);
-	sg_map_all(priv->dev, priv->dst_sg, DMA_FROM_DEVICE);
+	sg_map_all(priv->dev, src_sg, DMA_TO_DEVICE);
+	sg_map_all(priv->dev, dst_sg, DMA_FROM_DEVICE);
 
 	/* Start decryption by writing descriptors */
-	sg_feed_all(priv, priv->dst_sg, 1);
-	sg_feed_all(priv, priv->src_sg, 0);
+	sg_feed_all(priv, dst_sg, 1);
+	sg_feed_all(priv, src_sg, 0);
 
 	/* Wait for completion interrupt */
 	err = wait_event_interruptible(priv->irq_queue, priv->irq_done == 1);
@@ -291,8 +294,8 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 	}
 
 	/* Unmap chunks back */
-	sg_unmap_all(priv->dev, priv->src_sg, DMA_TO_DEVICE);
-	sg_unmap_all(priv->dev, priv->dst_sg, DMA_FROM_DEVICE);
+	sg_unmap_all(priv->dev, src_sg, DMA_TO_DEVICE);
+	sg_unmap_all(priv->dev, dst_sg, DMA_FROM_DEVICE);
 
 	return err;
 }
@@ -381,8 +384,10 @@ static int aes_probe(struct platform_device *pdev)
 	priv->dst_dma = dma_map_page(priv->dev, priv->dst_page, 0, PAGE_SIZE,
 			DMA_FROM_DEVICE);
 
-	priv->src_sg = sg_kmalloc(20, GFP_KERNEL);
-	priv->dst_sg = sg_kmalloc(20, GFP_KERNEL);
+	err = sg_alloc_table(&priv->src_table, 20, GFP_KERNEL);
+	BUG_ON(err);
+	err = sg_alloc_table(&priv->dst_table, 20, GFP_KERNEL);
+	BUG_ON(err);
 
 	iowrite32(0, &priv->aes_regs->main_ctrl);
 	iowrite32(1, &priv->aes_regs->main_ctrl);
@@ -410,8 +415,8 @@ static int aes_remove(struct platform_device *pdev)
 
 	free_irq(priv->irq, priv);
 
-	sg_kfree(priv->src_sg, 20);
-	sg_kfree(priv->dst_sg, 20);
+	sg_free_table(&priv->src_table);
+	sg_free_table(&priv->dst_table);
 
 	dma_unmap_page(priv->dev, priv->src_dma, PAGE_SIZE, DMA_TO_DEVICE);
 	dma_unmap_page(priv->dev, priv->dst_dma, PAGE_SIZE, DMA_FROM_DEVICE);
