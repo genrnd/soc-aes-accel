@@ -228,6 +228,33 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 	sg_mark_end(old_to);
 }
 
+static void sg_map_all(struct device *dev, struct scatterlist *sg,
+		enum dma_data_direction dir)
+{
+	struct scatterlist *i;
+
+	for (i = sg; i; i = sg_next(i)) {
+		i->dma_address = dma_map_page(dev, sg_page(i), i->offset, i->length, dir);
+		BUG_ON(dma_mapping_error(dev, i->dma_address));
+	}
+}
+
+static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_dst)
+{
+	struct scatterlist *i;
+	int err;
+
+	for (i = sg; i; i = sg_next(i)) {
+		bool irq_en;
+
+		irq_en = sg_is_last(i) && is_dst;
+
+		err = write_fpga_desc(priv, i->dma_address, i->length, irq_en, is_dst);
+		if (err)
+			pr_err("write_dst_desc failed: %d\n", err);
+	}
+}
+
 #define MAX_DESC_CNT 16
 
 static int fpga_decrypt(struct blkcipher_desc *desc,
