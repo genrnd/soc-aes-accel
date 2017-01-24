@@ -188,14 +188,14 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 		if (sg->length % 16) {
 			unsigned int first_len, second_len, third_len;
 			struct scatterlist *sgn;
-			void *sgn_page, *sg_page;
+			void *sgn_page_ptr, *sg_page_ptr;
 
 			sgn = sg_next(sg);
-			sgn_page = kmap_atomic(sg_page(sgn));
-			BUG_ON(!sgn_page);
+			sgn_page_ptr = kmap_atomic(sg_page(sgn));
+			BUG_ON(!sgn_page_ptr);
 
-			sg_page = kmap_atomic(sg_page(sg));
-			BUG_ON(!sg_page);
+			sg_page_ptr = kmap_atomic(sg_page(sg));
+			BUG_ON(!sg_page_ptr);
 
 			first_len = sg->length & ~0xf;
 			second_len = sg->length & 0xf;
@@ -207,8 +207,8 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 				to = sg_next(to);
 			}
 
-			memcpy(buff + buff_offset, sg_page + sg->offset + first_len, second_len);
-			memcpy(buff + buff_offset + first_len, sgn_page + sgn_offset, third_len);
+			memcpy(buff + buff_offset, sg_page_ptr + sg->offset + first_len, second_len);
+			memcpy(buff + buff_offset + first_len, sgn_page_ptr + sgn_offset, third_len);
 
 			sg_set_page(to, page, 0x10, buff_offset);
 			old_to = to;
@@ -217,8 +217,8 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 			sgn->offset += third_len;
 			sgn->length -= third_len;
 
-			kunmap(sg_page);
-			kunmap(sgn_page);
+			kunmap(sg_page_ptr);
+			kunmap(sgn_page_ptr);
 		} else {
 			sg_set_page(to, sg_page(sg), sg->length, sg->offset);
 			old_to = to;
