@@ -1,4 +1,9 @@
 aes-crypto-api-iface (0.0.1-1) unstable; urgency=low
+  2017/01/26
+    ! aes-crypto-api-iface.c:   
+        Fix bug in temporary buffer offset calculation.
+      [dg]
+
   2017/01/18
     * aes-crypto-api-iface.c:
         Fix NULL pointer dereference bug caused by ISR being registered before

@@ -160,6 +160,8 @@ static int fpga_encrypt(struct blkcipher_desc *desc,
 	return 0;
 }
 
+
+
 static void sg_split_to_aligned(void *buff, struct page *page,
 		struct scatterlist *from, struct scatterlist *to)
 {
@@ -172,10 +174,12 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 	buff_offset = 0;
 
 	for (sg = from; sg; sg = sg_next(sg)) {
+                printk( "orig len = %d\n", sg->length ); 
+
 		if (!sg->length)
 			continue;
 
-		if (sg->length % 16) {
+		if (sg->length % AES_BLOCK_SIZE) {
 			unsigned int first_len, second_len, third_len;
 			struct scatterlist *sgn;
 			void *sgn_page_ptr, *sg_page_ptr;
@@ -189,7 +193,7 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 
 			first_len = sg->length & ~0xf;
 			second_len = sg->length & 0xf;
-			third_len = 0x10 - second_len;
+			third_len = AES_BLOCK_SIZE - second_len;
 
 			if (first_len) {
 				sg_set_page(to, sg_page(sg), first_len, sg->offset);
@@ -198,11 +202,13 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 			}
 
 			memcpy(buff + buff_offset, sg_page_ptr + sg->offset + first_len, second_len);
-			memcpy(buff + buff_offset + first_len, sgn_page_ptr + sgn->offset, third_len);
+			memcpy(buff + buff_offset + second_len, sgn_page_ptr + sgn->offset, third_len);
 
-			sg_set_page(to, page, 0x10, buff_offset);
+			sg_set_page(to, page, AES_BLOCK_SIZE, buff_offset);
 			old_to = to;
 			to = sg_next(to);
+                        
+                        buff_offset += AES_BLOCK_SIZE;
 
 			sgn->offset += third_len;
 			sgn->length -= third_len;
@@ -255,7 +261,7 @@ static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_d
 	}
 }
 
-#define MAX_DESC_CNT 16
+#define SG_MAX_SIZE 20
 
 static int fpga_decrypt(struct blkcipher_desc *desc,
 			struct scatterlist *dst,
@@ -273,6 +279,9 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 	fpga_write_iv(desc->info);
 
 	priv->irq_done = 0;
+
+        sg_init_table(src_sg, SG_MAX_SIZE);
+        sg_init_table(dst_sg, SG_MAX_SIZE);
 
 	/* Align scatterlists provided to us */
 	sg_split_to_aligned(priv->src, priv->src_page, src, src_sg);
@@ -384,9 +393,9 @@ static int aes_probe(struct platform_device *pdev)
 	priv->dst_dma = dma_map_page(priv->dev, priv->dst_page, 0, PAGE_SIZE,
 			DMA_FROM_DEVICE);
 
-	err = sg_alloc_table(&priv->src_table, 20, GFP_KERNEL);
+	err = sg_alloc_table(&priv->src_table, SG_MAX_SIZE, GFP_KERNEL);
 	BUG_ON(err);
-	err = sg_alloc_table(&priv->dst_table, 20, GFP_KERNEL);
+	err = sg_alloc_table(&priv->dst_table, SG_MAX_SIZE, GFP_KERNEL);
 	BUG_ON(err);
 
 	iowrite32(0, &priv->aes_regs->main_ctrl);
