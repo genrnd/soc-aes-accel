@@ -1,6 +1,11 @@
 aes-crypto-api-iface (0.0.1-1) unstable; urgency=low
   2017/01/26
     ! aes-crypto-api-iface.c:   
+        Bugfix -- add copying decrypted plain text from temporary
+        buffer to destination scatterlist buffers.
+      [dg]
+
+    ! aes-crypto-api-iface.c:   
         Fix bug in temporary buffer offset calculation.
       [dg]
 
