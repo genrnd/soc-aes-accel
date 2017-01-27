@@ -52,13 +52,12 @@ struct netdma_regs {
 	u32 dst_desc;
 } __attribute__ ((packed, aligned(NETDMA_CSR_SIZE)));
 
-
 struct sg_meta_info {
-        int           sg_idx;
-        ssize_t       size;
-        ssize_t       sg_offset;
-        ssize_t       buff_offset;
-        bool          last;
+	int           sg_idx;
+	ssize_t       size;
+	ssize_t       sg_offset;
+	ssize_t       buff_offset;
+	bool          last;
 };
 
 struct aes_priv {
@@ -74,15 +73,15 @@ struct aes_priv {
 	struct page *dst_page;
 	dma_addr_t dst_dma;
 	void *dst;
-	
-        struct sg_table dst_orig_table;
+
+	struct sg_table dst_orig_table;
 
 	struct sg_table src_table;
 	struct page *src_page;
 	dma_addr_t src_dma;
 	void *src;
 
-        struct sg_meta_info *meta;
+	struct sg_meta_info *meta;
 };
 
 struct aes_priv *priv;
@@ -130,11 +129,11 @@ static int fpga_set_key(struct crypto_tfm *tfm, const u8 *in_key,
 	w_buf = (const uint32_t *)in_key;
 
 	for (i = 3; i >= 0; i--) {
-		//printk("key[ %d ] = 0x%x\n", i, w_buf[i] );
+		/* printk("key[ %d ] = 0x%x\n", i, w_buf[i] ); */
 		iowrite32(w_buf[i], priv->aes_regs->key + i);
 	}
 
-	//printk("key written successfully\n");
+	/* printk("key written successfully\n"); */
 	return 0;
 }
 
@@ -146,23 +145,23 @@ static int fpga_write_iv(const u8 *iv)
 	w_buf = (const uint32_t *)iv;
 
 	for (i = 3; i >= 0; i--) {
-		//printk("iv[ %d ] = 0x%x\n", i, w_buf[i]);
+		/* printk("iv[ %d ] = 0x%x\n", i, w_buf[i]); */
 		iowrite32(w_buf[i], priv->aes_regs->iv + i);
 	}
 
-	//printk("iv written successfully\n");
+	/* printk("iv written successfully\n"); */
 	return 0;
 }
 
 static int fpga_aes_init(struct crypto_tfm *tfm)
 {
-	//printk("fpga_aes_init\n");
+	/* printk("fpga_aes_init\n"); */
 	return 0;
 }
 
 static void fpga_aes_exit(struct crypto_tfm *tfm)
 {
-	//printk("fpga_aes_exit\n");
+	/* printk("fpga_aes_exit\n"); */
 }
 
 static int fpga_encrypt(struct blkcipher_desc *desc,
@@ -175,80 +174,67 @@ static int fpga_encrypt(struct blkcipher_desc *desc,
 
 static void test_write(struct aes_priv *priv, int data)
 {
-        data = data << 1;
+	data = data << 1;
 	iowrite32(data, &priv->aes_regs->main_ctrl);
 }
 
 static void sg_copy_back(struct sg_meta_info *meta, struct scatterlist *sg, void *buff)
 {
 	struct scatterlist *i;
-        int idx;
-        int sg_idx;
+	int idx;
+	int sg_idx;
 	void *sg_page_ptr;
 
-        idx = 0;
-        sg_idx = 0;
+	idx = 0;
+	sg_idx = 0;
 
 	for (i = sg; i; i = sg_next(i)) {
 		sg_page_ptr = kmap_atomic(sg_page(i));
 		BUG_ON(!sg_page_ptr);
 
+		while (meta[idx].sg_idx == sg_idx) {
+			/* printk( "copy: sg_idx = %d, meta_idx = %d, to = %d, from = %d, size = %d\n", sg_idx, idx, i->offset + meta[idx].sg_offset,  meta[idx].buff_offset, meta[idx].size ); */
+			memcpy(sg_page_ptr + i->offset + meta[idx].sg_offset, buff + meta[idx].buff_offset, meta[idx].size);
 
-                while (meta[idx].sg_idx == sg_idx) {
-                        //printk( "copy: sg_idx = %d, meta_idx = %d, to = %d, from = %d, size = %d\n", sg_idx, idx, i->offset + meta[idx].sg_offset,  meta[idx].buff_offset, meta[idx].size );
-                        memcpy(sg_page_ptr + i->offset + meta[idx].sg_offset, buff + meta[idx].buff_offset, meta[idx].size);
+			if (meta[idx].last)
+				break;
 
-                        if (meta[idx].last)
-                                break;
+			idx++;
+		}
 
-                        idx++;
-                }
-
-                sg_idx++;
-	        kunmap_atomic(sg_page_ptr);
-        }
+		sg_idx++;
+		kunmap_atomic(sg_page_ptr);
+	}
 
 }
-
-
-static void print_meta(struct sg_meta_info *meta)
-{
-  while(!meta->last) {
-        printk( "idx = %d, size = %d, b_off = %d, sg_off = %d\n", meta->sg_idx, meta->size, meta->buff_offset, meta->sg_offset );
-        meta++;
-  }
-
-  printk( "idx = %d, size = %d, b_off = %d, sg_off = %d\n", meta->sg_idx, meta->size, meta->buff_offset, meta->sg_offset );
-}
-
 
 static void set_meta(struct sg_meta_info *meta, int idx, ssize_t size, ssize_t sg_offset, ssize_t buff_offset)
 {
-        meta->sg_idx      = idx;
-        meta->size        = size;
-        meta->sg_offset   = sg_offset;
-        meta->buff_offset = buff_offset;
-        meta->last        = 0;
+	meta->sg_idx      = idx;
+	meta->size        = size;
+	meta->sg_offset   = sg_offset;
+	meta->buff_offset = buff_offset;
+	meta->last        = 0;
 }
 
 static void sg_split_to_aligned(void *buff, struct page *page,
-		struct scatterlist *from, struct scatterlist *to, bool is_dst, struct sg_meta_info *meta)
+				struct scatterlist *from, struct scatterlist *to, bool is_dst, struct sg_meta_info *meta)
 {
 	struct scatterlist *sg;
 	struct scatterlist *old_to;
 	ssize_t buff_offset;
-        int sg_idx;
-        int meta_idx;
+	int sg_idx;
+	int meta_idx;
 
 	old_to = NULL;
 
 	buff_offset = 0;
-        meta_idx = 0;
-        sg_idx = 0;
+	meta_idx = 0;
+	sg_idx = 0;
 
 	for (sg = from; sg; sg = sg_next(sg)) {
-                
-                //printk( "orig len = %d off = %d\n", sg->length, sg->offset ); 
+
+		/* printk( "orig len = %d off = %d\n", sg->length, sg->offset ); */
 
 		if (!sg->length)
 			continue;
@@ -269,7 +255,7 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 			second_len = sg->length & 0xf;
 			third_len = AES_BLOCK_SIZE - second_len;
 
-                        //printk( "lens = %d %d %d\n", first_len, second_len, third_len );
+			/* printk( "lens = %d %d %d\n", first_len, second_len, third_len ); */
 
 			if (first_len) {
 				sg_set_page(to, sg_page(sg), first_len, sg->offset);
@@ -277,22 +263,22 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 				to = sg_next(to);
 			}
 
-                        //printk( "0: to = 0x%p, from = 0x%p\n", buff + buff_offset,  sg_page_ptr + sg->offset + first_len );
-                        //printk( "1: to = 0x%p, from = 0x%p\n", buff + buff_offset + first_len,  sgn_page_ptr + sgn->offset );
+			/* printk( "0: to = 0x%p, from = 0x%p\n", buff + buff_offset,  sg_page_ptr + sg->offset + first_len ); */
+			/* printk( "1: to = 0x%p, from = 0x%p\n", buff + buff_offset + first_len,  sgn_page_ptr + sgn->offset ); */
 
-                        if (is_dst) {
-                                set_meta(&meta[meta_idx++], sg_idx++, second_len, first_len, buff_offset);
-                                set_meta(&meta[meta_idx++], sg_idx, third_len, 0, buff_offset + second_len);
-                        } else {
-			        memcpy(buff + buff_offset, sg_page_ptr + sg->offset + first_len, second_len);
-			        memcpy(buff + buff_offset + second_len, sgn_page_ptr + sgn->offset, third_len);
-                        }
+			if (is_dst) {
+				set_meta(&meta[meta_idx++], sg_idx++, second_len, first_len, buff_offset);
+				set_meta(&meta[meta_idx++], sg_idx, third_len, 0, buff_offset + second_len);
+			} else {
+				memcpy(buff + buff_offset, sg_page_ptr + sg->offset + first_len, second_len);
+				memcpy(buff + buff_offset + second_len, sgn_page_ptr + sgn->offset, third_len);
+			}
 
 			sg_set_page(to, page, AES_BLOCK_SIZE, buff_offset);
 			old_to = to;
 			to = sg_next(to);
-                        
-                        buff_offset += AES_BLOCK_SIZE;
+
+			buff_offset += AES_BLOCK_SIZE;
 
 			sgn->offset += third_len;
 			sgn->length -= third_len;
@@ -306,12 +292,12 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 		}
 	}
 
-        meta[meta_idx - 1].last = 1;
+	meta[meta_idx - 1].last = 1;
 	sg_mark_end(old_to);
 }
 
 static void sg_map_all(struct device *dev, struct scatterlist *sg,
-		enum dma_data_direction dir)
+		       enum dma_data_direction dir)
 {
 	struct scatterlist *i;
 
@@ -322,7 +308,7 @@ static void sg_map_all(struct device *dev, struct scatterlist *sg,
 }
 
 static void sg_unmap_all(struct device *dev, struct scatterlist *sg,
-		enum dma_data_direction dir)
+			 enum dma_data_direction dir)
 {
 	struct scatterlist *i;
 
@@ -334,19 +320,19 @@ static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_d
 {
 	struct scatterlist *i;
 	int err;
-        //void *v;
-        //int ii;
+	/* void *v; */
+	/* int ii; */
 
 	for (i = sg; i; i = sg_next(i)) {
 		bool irq_en;
 
 		irq_en = sg_is_last(i) && is_dst;
-                //v = sg_virt(i);
+		/* v = sg_virt(i); */
 
-                //printk( "%s: addr = 0x%x len = %u\n", is_dst ? "dst" : "src", i->dma_address, i->length );
+		/* printk( "%s: addr = 0x%x len = %u\n", is_dst ? "dst" : "src", i->dma_address, i->length ); */
 
-                //for( ii = 0; ii < 4; ii++ )
-                  //printk( "  0x%p = 0x%lx\n", (unsigned long *)v + ii, *((unsigned long *)v + ii) );
+		/* for( ii = 0; ii < 4; ii++ ) */
+		  /* printk( "  0x%p = 0x%lx\n", (unsigned long *)v + ii, *((unsigned long *)v + ii) ); */
 		err = write_fpga_desc(priv, i->dma_address, i->length, irq_en, is_dst);
 		if (err)
 			pr_err("write_dst_desc failed: %d\n", err);
@@ -367,56 +353,55 @@ static int fpga_decrypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 
 	BUG_ON(nbytes > PAGE_SIZE);
 
-        test_write(priv, 1);
+	test_write(priv, 1);
 
 	src_sg = priv->src_table.sgl;
 	dst_sg = priv->dst_table.sgl;
 	dst_orig_sg = priv->dst_orig_table.sgl;
 
-
 	fpga_write_iv(desc->info);
-        test_write(priv, 2);
+	test_write(priv, 2);
 
 	priv->irq_done = 0;
 
-        sg_init_table(src_sg, SG_MAX_SIZE);
-        sg_init_table(dst_sg, SG_MAX_SIZE);
-        sg_init_table(dst_orig_sg, SG_MAX_SIZE);
-        test_write(priv, 3);
-        
-        old_dst_orig_sg = dst;
+	sg_init_table(src_sg, SG_MAX_SIZE);
+	sg_init_table(dst_sg, SG_MAX_SIZE);
+	sg_init_table(dst_orig_sg, SG_MAX_SIZE);
+	test_write(priv, 3);
+
+	old_dst_orig_sg = dst;
 
 	for (i = dst; i; i = sg_next(i)) {
-	        sg_set_page(dst_orig_sg, sg_page(i), i->length, i->offset);
-                old_dst_orig_sg = dst_orig_sg;
-                dst_orig_sg = sg_next(dst_orig_sg);
-        }
+		sg_set_page(dst_orig_sg, sg_page(i), i->length, i->offset);
+		old_dst_orig_sg = dst_orig_sg;
+		dst_orig_sg = sg_next(dst_orig_sg);
+	}
 
-	sg_mark_end(old_dst_orig_sg);        
+	sg_mark_end(old_dst_orig_sg);
 
 	dst_orig_sg = priv->dst_orig_table.sgl;
-        test_write(priv, 4);
+	test_write(priv, 4);
 
 	/* Align scatterlists provided to us */
 	sg_split_to_aligned(priv->src, priv->src_page, src, src_sg, 0, priv->meta);
-        test_write(priv, 5);
+	test_write(priv, 5);
 	sg_split_to_aligned(priv->dst, priv->dst_page, dst_orig_sg, dst_sg, 1, priv->meta);
-        test_write(priv, 6);
+	test_write(priv, 6);
 
-        //print_meta(priv->meta);
+	/* print_meta(priv->meta); */
 
 	/* Map memory chunk for passing to DMA controller */
 	sg_map_all(priv->dev, src_sg, DMA_TO_DEVICE);
-        test_write(priv, 7);
+	test_write(priv, 7);
 	sg_map_all(priv->dev, dst_sg, DMA_FROM_DEVICE);
-        test_write(priv, 8);
+	test_write(priv, 8);
 
 	/* Start decryption by writing descriptors */
-        test_write(priv, 9);
+	test_write(priv, 9);
 	sg_feed_all(priv, dst_sg, 1);
-        test_write(priv, 10);
+	test_write(priv, 10);
 	sg_feed_all(priv, src_sg, 0);
-        test_write(priv, 11);
+	test_write(priv, 11);
 
 	/* Wait for completion interrupt */
 	err = wait_event_interruptible(priv->irq_queue, priv->irq_done == 1);
@@ -425,15 +410,15 @@ static int fpga_decrypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 		return err;
 	}
 
-        test_write(priv, 201);
+	test_write(priv, 201);
 	sg_copy_back(priv->meta, dst, priv->dst);
-        test_write(priv, 202);
+	test_write(priv, 202);
 
 	/* Unmap chunks back */
 	sg_unmap_all(priv->dev, src_sg, DMA_TO_DEVICE);
-        test_write(priv, 203);
+	test_write(priv, 203);
 	sg_unmap_all(priv->dev, dst_sg, DMA_FROM_DEVICE);
-        test_write(priv, 204);
+	test_write(priv, 204);
 
 	return err;
 }
@@ -474,8 +459,8 @@ static irqreturn_t fpga_isr(int irq, void *dev_id)
 {
 	struct netdma_rx_report report;
 
-	//printk( "IRQ2!\n" );
-        test_write(priv, 101);
+	/* printk( "IRQ2!\n" ); */
+	test_write(priv, 101);
 
 	while (!
 	       (ioread32(&priv->dma_regs->status) &
@@ -488,8 +473,8 @@ static irqreturn_t fpga_isr(int irq, void *dev_id)
 	priv->irq_done = 1;
 	wake_up_interruptible(&priv->irq_queue);
 
-        test_write(priv, 102);
-	//printk( "IRQ2 end\n" );
+	test_write(priv, 102);
+	/* printk( "IRQ2 end\n" ); */
 
 	return IRQ_HANDLED;
 }
