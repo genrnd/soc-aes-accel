@@ -48,12 +48,14 @@ described in dts by the following lines:
 ```dts
 my-aes-decryptor {
 	compatible = "stcmtk,aes";
+	interrupts = <0x0 0x1 0x2>;
 };
 ```
 
 Currently all the device properties (register addresses, block size) are
-hardcoded in the driver, so no properties except `compatible` can be specified
-in DTS.
+hardcoded in the driver, so no properties except `compatible` and `interrupts`
+can be specified in DTS. `interrputs` property must describe a single interrupt
+that is issued by decryption accelerator's DMA controller in FPGA.
 
 STC Metortek's SoC-based devices are shipped with custom fpga manager driver
 (`etn-fpga-mgr.ko`) installed while the upstream Altera's fpga manager (called
