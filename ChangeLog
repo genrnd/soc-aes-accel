@@ -1,11 +1,26 @@
 aes-crypto-api-iface (0.0.1-1) unstable; urgency=low
+  2017/01/27
+    + aes-crypto-api-iface.c:
+        1) Add encrypt operation support.
+           It is use separate control registers set for DMA & Crypto engine
+           (include registers for key & iv).
+           Now we write same key & iv in both (encrypt & decrypt) registers.
+
+        2) Delete reading IRQ status in ISR.
+           Now it is not necessary - FPGA has become more smart.
+
+        3) Comment out obtaining IRQ numbers from .dtb
+           Hardcoded IRQ to 72 for decrypt engine & 73 for encrypt engine.
+           It is necessary to work with debug FPGA-firmware.
+      [dg]
+
   2017/01/26
-    ! aes-crypto-api-iface.c:   
+    ! aes-crypto-api-iface.c:
         Bugfix -- add copying decrypted plain text from temporary
         buffer to destination scatterlist buffers.
       [dg]
 
-    ! aes-crypto-api-iface.c:   
+    ! aes-crypto-api-iface.c:
         Fix bug in temporary buffer offset calculation.
       [dg]
 

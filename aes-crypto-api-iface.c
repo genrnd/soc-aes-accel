@@ -29,6 +29,9 @@
 #define AES_BASE  (FPGASLAVES + 0x2000)
 #define AES_SIZE  (10 * 4)
 
+#define DECRYPT_OFFSET (0x0000)
+#define ENCRYPT_OFFSET (0x4000)
+
 #define AES_BLOCK_SIZE 16
 #define FPGA_AUXDATA    8
 #define AES_KEY_SIZE   (32 * 4 / 8)
@@ -63,8 +66,13 @@ struct sg_meta_info {
 struct aes_priv {
 	uint32_t old_seq;
 	struct device *dev;
-	struct aes_regs __iomem *aes_regs;
-	struct netdma_regs __iomem *dma_regs;
+
+	struct aes_regs __iomem *decrypt_aes_regs;
+	struct netdma_regs __iomem *decrypt_dma_regs;
+
+	struct aes_regs __iomem *encrypt_aes_regs;
+	struct netdma_regs __iomem *encrypt_dma_regs;
+
 	wait_queue_head_t irq_queue;
 	int irq_done;
 
@@ -88,11 +96,9 @@ struct aes_priv {
 
 struct aes_priv *priv;
 
-static int write_fpga_desc(struct aes_priv *priv, u32 dma_address, u16 length,
-			   u8 irq_is_en, u8 is_dst)
+static int write_fpga_desc(struct aes_priv *priv, struct netdma_regs __iomem *regs,
+		u32 dma_address, u16 length, u8 irq_is_en, u8 is_dst)
 {
-	struct netdma_regs __iomem *regs = priv->dma_regs;
-
 	u32 control_field;
 
 	control_field = (length << DESC_BYTECOUNT_OFFSET) |
@@ -131,7 +137,10 @@ static int fpga_set_key(struct crypto_tfm *tfm, const u8 *in_key,
 	w_buf = (const uint32_t *)in_key;
 
 	for (i = 3; i >= 0; i--)
-		iowrite32(w_buf[i], priv->aes_regs->key + i);
+		iowrite32(w_buf[i], priv->decrypt_aes_regs->key + i);
+
+	for (i = 3; i >= 0; i--)
+		iowrite32(w_buf[i], priv->encrypt_aes_regs->key + i);
 
 	return 0;
 }
@@ -144,7 +153,10 @@ static int fpga_write_iv(const u8 *iv)
 	w_buf = (const uint32_t *)iv;
 
 	for (i = 3; i >= 0; i--)
-		iowrite32(w_buf[i], priv->aes_regs->iv + i);
+		iowrite32(w_buf[i], priv->decrypt_aes_regs->iv + i);
+
+	for (i = 3; i >= 0; i--)
+		iowrite32(w_buf[i], priv->encrypt_aes_regs->iv + i);
 
 	return 0;
 }
@@ -156,14 +168,6 @@ static int fpga_aes_init(struct crypto_tfm *tfm)
 
 static void fpga_aes_exit(struct crypto_tfm *tfm)
 {
-}
-
-static int fpga_encrypt(struct blkcipher_desc *desc,
-			struct scatterlist *dst,
-			struct scatterlist *src, unsigned int nbytes)
-{
-	printk(KERN_INFO "fpga_aes_enc\n");
-	return 0;
 }
 
 static void sg_copy_back(struct sg_meta_info *meta, struct scatterlist *sg, void *buff)
@@ -295,7 +299,7 @@ static void sg_unmap_all(struct device *dev, struct scatterlist *sg,
 		dma_unmap_page(dev, i->dma_address, i->length, dir);
 }
 
-static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_dst)
+static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_encrypt, bool is_dst)
 {
 	struct scatterlist *i;
 	int err;
@@ -305,7 +309,11 @@ static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_d
 
 		irq_en = sg_is_last(i) && is_dst;
 
-		err = write_fpga_desc(priv, i->dma_address, i->length, irq_en, is_dst);
+		if (is_encrypt)
+			err = write_fpga_desc(priv, priv->encrypt_dma_regs, i->dma_address, i->length, irq_en, is_dst);
+		else
+			err = write_fpga_desc(priv, priv->decrypt_dma_regs, i->dma_address, i->length, irq_en, is_dst);
+
 		if (err)
 			pr_err("write_dst_desc failed: %d\n", err);
 	}
@@ -313,8 +321,8 @@ static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_d
 
 #define SG_MAX_SIZE 20
 
-static int fpga_decrypt(struct blkcipher_desc *desc, struct scatterlist *dst,
-			struct scatterlist *src, unsigned int nbytes)
+static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
+			struct scatterlist *src, unsigned int nbytes, bool is_encrypt)
 {
 	int err;
 	struct scatterlist *i;
@@ -358,8 +366,8 @@ static int fpga_decrypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	sg_map_all(priv->dev, dst_sg, DMA_FROM_DEVICE);
 
 	/* Start decryption by writing descriptors */
-	sg_feed_all(priv, dst_sg, 1);
-	sg_feed_all(priv, src_sg, 0);
+	sg_feed_all(priv, dst_sg, is_encrypt, 1);
+	sg_feed_all(priv, src_sg, is_encrypt, 0);
 
 	/* Wait for completion interrupt */
 	err = wait_event_interruptible(priv->irq_queue, priv->irq_done == 1);
@@ -376,6 +384,23 @@ static int fpga_decrypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 
 	return err;
 }
+
+
+static int fpga_encrypt(struct blkcipher_desc *desc,
+			struct scatterlist *dst,
+			struct scatterlist *src, unsigned int nbytes)
+{
+	return fpga_crypt(desc, dst, src, nbytes, 1);
+}
+
+
+static int fpga_decrypt(struct blkcipher_desc *desc,
+			struct scatterlist *dst,
+			struct scatterlist *src, unsigned int nbytes)
+{
+	return fpga_crypt(desc, dst, src, nbytes, 0);
+}
+
 
 struct crypto_alg fpga_alg = {
 	.cra_name = "cbc(aes)",
@@ -399,28 +424,8 @@ struct crypto_alg fpga_alg = {
 	}
 };
 
-static void fpga_read_rx_report(struct netdma_rx_report *report)
-{
-	unsigned int rx_report;
-
-	rx_report = ioread32(&priv->dma_regs->rx_report);
-	report->actual_bytes_transferred =
-		(rx_report >> RX_REPORT_ACTUAL_BYTES_OFFSET) &
-		RX_REPORT_ACTUAL_BYTES_MASK;
-}
-
 static irqreturn_t fpga_isr(int irq, void *dev_id)
 {
-	struct netdma_rx_report report;
-
-	while (!
-	       (ioread32(&priv->dma_regs->status) &
-		STAT_RX_REPORT_BUFFER_EMPTY))
-		fpga_read_rx_report(&report);
-
-	iowrite32(0, &priv->dma_regs->control);
-	iowrite32(6, &priv->dma_regs->control);
-
 	priv->irq_done = 1;
 	wake_up_interruptible(&priv->irq_queue);
 
@@ -441,17 +446,24 @@ static int aes_probe(struct platform_device *pdev)
 
 	priv->dev = &pdev->dev;
 
+	/*
 	priv->irq_decrypt = irq_of_parse_and_map(pdev->dev.of_node, 0);
 	BUG_ON(!priv->irq_decrypt);
 
 	priv->irq_encrypt = irq_of_parse_and_map(pdev->dev.of_node, 1);
 	BUG_ON(!priv->irq_encrypt);
+	*/
+	priv->irq_decrypt = 72;
+	priv->irq_encrypt = 73;
 
 	dev_info(&pdev->dev, "decrypt irq = %d", priv->irq_decrypt);
 	dev_info(&pdev->dev, "encrypt irq = %d", priv->irq_encrypt);
 
-	priv->aes_regs = ioremap(AES_BASE, AES_SIZE);
-	priv->dma_regs = ioremap(DMA_BASE, DMA_SIZE);
+	priv->decrypt_aes_regs = ioremap(AES_BASE + DECRYPT_OFFSET, AES_SIZE);
+	priv->decrypt_dma_regs = ioremap(DMA_BASE + DECRYPT_OFFSET, DMA_SIZE);
+
+	priv->encrypt_aes_regs = ioremap(AES_BASE + ENCRYPT_OFFSET, AES_SIZE);
+	priv->encrypt_dma_regs = ioremap(DMA_BASE + ENCRYPT_OFFSET, DMA_SIZE);
 
 	priv->src = (void *)devm_get_free_pages(priv->dev, GFP_KERNEL, 0);
 	priv->dst = (void *)devm_get_free_pages(priv->dev, GFP_KERNEL, 0);
@@ -471,11 +483,18 @@ static int aes_probe(struct platform_device *pdev)
 	err = sg_alloc_table(&priv->dst_orig_table, SG_MAX_SIZE, GFP_KERNEL);
 	BUG_ON(err);
 
-	iowrite32(0, &priv->aes_regs->main_ctrl);
-	iowrite32(1, &priv->aes_regs->main_ctrl);
-	iowrite32(0, &priv->aes_regs->main_ctrl);
+	iowrite32(0, &priv->decrypt_aes_regs->main_ctrl);
+	iowrite32(1, &priv->decrypt_aes_regs->main_ctrl);
+	iowrite32(0, &priv->decrypt_aes_regs->main_ctrl);
 
-	iowrite32(6, &priv->dma_regs->control);
+	iowrite32(6, &priv->decrypt_dma_regs->control);
+
+
+	iowrite32(0, &priv->encrypt_aes_regs->main_ctrl);
+	iowrite32(1, &priv->encrypt_aes_regs->main_ctrl);
+	iowrite32(0, &priv->encrypt_aes_regs->main_ctrl);
+
+	iowrite32(6, &priv->encrypt_dma_regs->control);
 
 	init_waitqueue_head(&priv->irq_queue);
 
@@ -511,8 +530,11 @@ static int aes_remove(struct platform_device *pdev)
 	dma_unmap_page(priv->dev, priv->src_dma, PAGE_SIZE, DMA_TO_DEVICE);
 	dma_unmap_page(priv->dev, priv->dst_dma, PAGE_SIZE, DMA_FROM_DEVICE);
 
-	iounmap(priv->aes_regs);
-	iounmap(priv->dma_regs);
+	iounmap(priv->decrypt_aes_regs);
+	iounmap(priv->decrypt_dma_regs);
+
+	iounmap(priv->encrypt_aes_regs);
+	iounmap(priv->encrypt_dma_regs);
 
 	dev_info(&pdev->dev, "device removed");
 
