@@ -355,8 +355,7 @@ static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_d
 
 #define SG_MAX_SIZE 20
 
-static int fpga_decrypt(struct blkcipher_desc *desc,
-			struct scatterlist *dst,
+static int fpga_decrypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 			struct scatterlist *src, unsigned int nbytes)
 {
 	int err;
