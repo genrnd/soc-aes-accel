@@ -67,7 +67,9 @@ struct aes_priv {
 	struct netdma_regs __iomem *dma_regs;
 	wait_queue_head_t irq_queue;
 	int irq_done;
-	int irq;
+
+	int irq_decrypt;
+	int irq_encrypt;
 
 	struct sg_table dst_table;
 	struct page *dst_page;
@@ -439,10 +441,14 @@ static int aes_probe(struct platform_device *pdev)
 
 	priv->dev = &pdev->dev;
 
-	priv->irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
-	BUG_ON(!priv->irq);
+	priv->irq_decrypt = irq_of_parse_and_map(pdev->dev.of_node, 0);
+	BUG_ON(!priv->irq_decrypt);
 
-	dev_info(&pdev->dev, "irq = %d", priv->irq);
+	priv->irq_encrypt = irq_of_parse_and_map(pdev->dev.of_node, 1);
+	BUG_ON(!priv->irq_encrypt);
+
+	dev_info(&pdev->dev, "decrypt irq = %d", priv->irq_decrypt);
+	dev_info(&pdev->dev, "encrypt irq = %d", priv->irq_encrypt);
 
 	priv->aes_regs = ioremap(AES_BASE, AES_SIZE);
 	priv->dma_regs = ioremap(DMA_BASE, DMA_SIZE);
@@ -473,9 +479,15 @@ static int aes_probe(struct platform_device *pdev)
 
 	init_waitqueue_head(&priv->irq_queue);
 
-	err = request_irq(priv->irq, fpga_isr, IRQF_SHARED, "fpga-aes", priv);
+	err = request_irq(priv->irq_decrypt, fpga_isr, IRQF_SHARED, "fpga-aes-decrypt", priv);
 	if (err) {
-		dev_err(&pdev->dev, "request_irq failed!");
+		dev_err(&pdev->dev, "request_irq for encrypt failed!");
+		return -ENOMEM;
+	}
+
+	err = request_irq(priv->irq_encrypt, fpga_isr, IRQF_SHARED, "fpga-aes-encrypt", priv);
+	if (err) {
+		dev_err(&pdev->dev, "request_irq for encrypt failed!");
 		return -ENOMEM;
 	}
 
@@ -489,7 +501,8 @@ static int aes_remove(struct platform_device *pdev)
 {
 	crypto_unregister_alg(&fpga_alg);
 
-	free_irq(priv->irq, priv);
+	free_irq(priv->irq_decrypt, priv);
+	free_irq(priv->irq_encrypt, priv);
 
 	sg_free_table(&priv->src_table);
 	sg_free_table(&priv->dst_table);
