@@ -172,12 +172,6 @@ static int fpga_encrypt(struct blkcipher_desc *desc,
 	return 0;
 }
 
-static void test_write(struct aes_priv *priv, int data)
-{
-	data = data << 1;
-	iowrite32(data, &priv->aes_regs->main_ctrl);
-}
-
 static void sg_copy_back(struct sg_meta_info *meta, struct scatterlist *sg, void *buff)
 {
 	struct scatterlist *i;
@@ -353,21 +347,17 @@ static int fpga_decrypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 
 	BUG_ON(nbytes > PAGE_SIZE);
 
-	test_write(priv, 1);
-
 	src_sg = priv->src_table.sgl;
 	dst_sg = priv->dst_table.sgl;
 	dst_orig_sg = priv->dst_orig_table.sgl;
 
 	fpga_write_iv(desc->info);
-	test_write(priv, 2);
 
 	priv->irq_done = 0;
 
 	sg_init_table(src_sg, SG_MAX_SIZE);
 	sg_init_table(dst_sg, SG_MAX_SIZE);
 	sg_init_table(dst_orig_sg, SG_MAX_SIZE);
-	test_write(priv, 3);
 
 	old_dst_orig_sg = dst;
 
@@ -380,28 +370,20 @@ static int fpga_decrypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	sg_mark_end(old_dst_orig_sg);
 
 	dst_orig_sg = priv->dst_orig_table.sgl;
-	test_write(priv, 4);
 
 	/* Align scatterlists provided to us */
 	sg_split_to_aligned(priv->src, priv->src_page, src, src_sg, 0, priv->meta);
-	test_write(priv, 5);
 	sg_split_to_aligned(priv->dst, priv->dst_page, dst_orig_sg, dst_sg, 1, priv->meta);
-	test_write(priv, 6);
 
 	/* print_meta(priv->meta); */
 
 	/* Map memory chunk for passing to DMA controller */
 	sg_map_all(priv->dev, src_sg, DMA_TO_DEVICE);
-	test_write(priv, 7);
 	sg_map_all(priv->dev, dst_sg, DMA_FROM_DEVICE);
-	test_write(priv, 8);
 
 	/* Start decryption by writing descriptors */
-	test_write(priv, 9);
 	sg_feed_all(priv, dst_sg, 1);
-	test_write(priv, 10);
 	sg_feed_all(priv, src_sg, 0);
-	test_write(priv, 11);
 
 	/* Wait for completion interrupt */
 	err = wait_event_interruptible(priv->irq_queue, priv->irq_done == 1);
@@ -410,15 +392,11 @@ static int fpga_decrypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 		return err;
 	}
 
-	test_write(priv, 201);
 	sg_copy_back(priv->meta, dst, priv->dst);
-	test_write(priv, 202);
 
 	/* Unmap chunks back */
 	sg_unmap_all(priv->dev, src_sg, DMA_TO_DEVICE);
-	test_write(priv, 203);
 	sg_unmap_all(priv->dev, dst_sg, DMA_FROM_DEVICE);
-	test_write(priv, 204);
 
 	return err;
 }
@@ -460,7 +438,6 @@ static irqreturn_t fpga_isr(int irq, void *dev_id)
 	struct netdma_rx_report report;
 
 	/* printk( "IRQ2!\n" ); */
-	test_write(priv, 101);
 
 	while (!
 	       (ioread32(&priv->dma_regs->status) &
@@ -473,7 +450,6 @@ static irqreturn_t fpga_isr(int irq, void *dev_id)
 	priv->irq_done = 1;
 	wake_up_interruptible(&priv->irq_queue);
 
-	test_write(priv, 102);
 	/* printk( "IRQ2 end\n" ); */
 
 	return IRQ_HANDLED;
