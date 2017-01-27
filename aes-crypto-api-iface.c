@@ -121,7 +121,7 @@ static int fpga_set_key(struct crypto_tfm *tfm, const u8 *in_key,
 	const uint32_t *w_buf;
 
 	if (key_len != AES_KEY_SIZE) {
-		printk("Provided key of length %u when %u expected\n",
+		printk(KERN_ERR "Provided key of length %u when %u expected\n",
 		       (unsigned int)key_len, (unsigned int)AES_KEY_SIZE);
 		return -EINVAL;
 	}
@@ -160,7 +160,7 @@ static int fpga_encrypt(struct blkcipher_desc *desc,
 			struct scatterlist *dst,
 			struct scatterlist *src, unsigned int nbytes)
 {
-	printk("fpga_aes_enc\n");
+	printk(KERN_INFO "fpga_aes_enc\n");
 	return 0;
 }
 
@@ -190,7 +190,6 @@ static void sg_copy_back(struct sg_meta_info *meta, struct scatterlist *sg, void
 		sg_idx++;
 		kunmap_atomic(sg_page_ptr);
 	}
-
 }
 
 static void set_meta(struct sg_meta_info *meta, int idx, ssize_t size, ssize_t sg_offset, ssize_t buff_offset)
@@ -352,8 +351,6 @@ static int fpga_decrypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	sg_split_to_aligned(priv->src, priv->src_page, src, src_sg, 0, priv->meta);
 	sg_split_to_aligned(priv->dst, priv->dst_page, dst_orig_sg, dst_sg, 1, priv->meta);
 
-	/* print_meta(priv->meta); */
-
 	/* Map memory chunk for passing to DMA controller */
 	sg_map_all(priv->dev, src_sg, DMA_TO_DEVICE);
 	sg_map_all(priv->dev, dst_sg, DMA_FROM_DEVICE);
@@ -365,7 +362,7 @@ static int fpga_decrypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	/* Wait for completion interrupt */
 	err = wait_event_interruptible(priv->irq_queue, priv->irq_done == 1);
 	if (err) {
-		printk("wait_event_interruptible failed.\n");
+		printk(KERN_ERR "wait_event_interruptible failed.\n");
 		return err;
 	}
 
@@ -445,7 +442,7 @@ static int aes_probe(struct platform_device *pdev)
 	priv->irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
 	BUG_ON(!priv->irq);
 
-	printk("irq = %d\n", priv->irq);
+	dev_info(&pdev->dev, "irq = %d", priv->irq);
 
 	priv->aes_regs = ioremap(AES_BASE, AES_SIZE);
 	priv->dma_regs = ioremap(DMA_BASE, DMA_SIZE);
@@ -478,7 +475,7 @@ static int aes_probe(struct platform_device *pdev)
 
 	err = request_irq(priv->irq, fpga_isr, IRQF_SHARED, "fpga-aes", priv);
 	if (err) {
-		printk("request_irq failed!");
+		dev_err(&pdev->dev, "request_irq failed!");
 		return -ENOMEM;
 	}
 
