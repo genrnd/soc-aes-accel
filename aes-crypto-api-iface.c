@@ -128,12 +128,9 @@ static int fpga_set_key(struct crypto_tfm *tfm, const u8 *in_key,
 
 	w_buf = (const uint32_t *)in_key;
 
-	for (i = 3; i >= 0; i--) {
-		/* printk("key[ %d ] = 0x%x\n", i, w_buf[i] ); */
+	for (i = 3; i >= 0; i--)
 		iowrite32(w_buf[i], priv->aes_regs->key + i);
-	}
 
-	/* printk("key written successfully\n"); */
 	return 0;
 }
 
@@ -144,24 +141,19 @@ static int fpga_write_iv(const u8 *iv)
 
 	w_buf = (const uint32_t *)iv;
 
-	for (i = 3; i >= 0; i--) {
-		/* printk("iv[ %d ] = 0x%x\n", i, w_buf[i]); */
+	for (i = 3; i >= 0; i--)
 		iowrite32(w_buf[i], priv->aes_regs->iv + i);
-	}
 
-	/* printk("iv written successfully\n"); */
 	return 0;
 }
 
 static int fpga_aes_init(struct crypto_tfm *tfm)
 {
-	/* printk("fpga_aes_init\n"); */
 	return 0;
 }
 
 static void fpga_aes_exit(struct crypto_tfm *tfm)
 {
-	/* printk("fpga_aes_exit\n"); */
 }
 
 static int fpga_encrypt(struct blkcipher_desc *desc,
@@ -187,7 +179,6 @@ static void sg_copy_back(struct sg_meta_info *meta, struct scatterlist *sg, void
 		BUG_ON(!sg_page_ptr);
 
 		while (meta[idx].sg_idx == sg_idx) {
-			/* printk( "copy: sg_idx = %d, meta_idx = %d, to = %d, from = %d, size = %d\n", sg_idx, idx, i->offset + meta[idx].sg_offset,  meta[idx].buff_offset, meta[idx].size ); */
 			memcpy(sg_page_ptr + i->offset + meta[idx].sg_offset, buff + meta[idx].buff_offset, meta[idx].size);
 
 			if (meta[idx].last)
@@ -228,8 +219,6 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 
 	for (sg = from; sg; sg = sg_next(sg)) {
 
-		/* printk( "orig len = %d off = %d\n", sg->length, sg->offset ); */
-
 		if (!sg->length)
 			continue;
 
@@ -249,16 +238,11 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 			second_len = sg->length & 0xf;
 			third_len = AES_BLOCK_SIZE - second_len;
 
-			/* printk( "lens = %d %d %d\n", first_len, second_len, third_len ); */
-
 			if (first_len) {
 				sg_set_page(to, sg_page(sg), first_len, sg->offset);
 				old_to = to;
 				to = sg_next(to);
 			}
-
-			/* printk( "0: to = 0x%p, from = 0x%p\n", buff + buff_offset,  sg_page_ptr + sg->offset + first_len ); */
-			/* printk( "1: to = 0x%p, from = 0x%p\n", buff + buff_offset + first_len,  sgn_page_ptr + sgn->offset ); */
 
 			if (is_dst) {
 				set_meta(&meta[meta_idx++], sg_idx++, second_len, first_len, buff_offset);
@@ -314,19 +298,12 @@ static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_d
 {
 	struct scatterlist *i;
 	int err;
-	/* void *v; */
-	/* int ii; */
 
 	for (i = sg; i; i = sg_next(i)) {
 		bool irq_en;
 
 		irq_en = sg_is_last(i) && is_dst;
-		/* v = sg_virt(i); */
 
-		/* printk( "%s: addr = 0x%x len = %u\n", is_dst ? "dst" : "src", i->dma_address, i->length ); */
-
-		/* for( ii = 0; ii < 4; ii++ ) */
-		  /* printk( "  0x%p = 0x%lx\n", (unsigned long *)v + ii, *((unsigned long *)v + ii) ); */
 		err = write_fpga_desc(priv, i->dma_address, i->length, irq_en, is_dst);
 		if (err)
 			pr_err("write_dst_desc failed: %d\n", err);
@@ -437,8 +414,6 @@ static irqreturn_t fpga_isr(int irq, void *dev_id)
 {
 	struct netdma_rx_report report;
 
-	/* printk( "IRQ2!\n" ); */
-
 	while (!
 	       (ioread32(&priv->dma_regs->status) &
 		STAT_RX_REPORT_BUFFER_EMPTY))
@@ -449,8 +424,6 @@ static irqreturn_t fpga_isr(int irq, void *dev_id)
 
 	priv->irq_done = 1;
 	wake_up_interruptible(&priv->irq_queue);
-
-	/* printk( "IRQ2 end\n" ); */
 
 	return IRQ_HANDLED;
 }
