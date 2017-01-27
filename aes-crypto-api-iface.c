@@ -145,18 +145,20 @@ static int fpga_set_key(struct crypto_tfm *tfm, const u8 *in_key,
 	return 0;
 }
 
-static int fpga_write_iv(const u8 *iv)
+static int fpga_write_iv(const u8 *iv, bool is_encrypt)
 {
 	int i;
 	const uint32_t *w_buf;
 
 	w_buf = (const uint32_t *)iv;
 
-	for (i = 3; i >= 0; i--)
-		iowrite32(w_buf[i], priv->decrypt_aes_regs->iv + i);
-
-	for (i = 3; i >= 0; i--)
-		iowrite32(w_buf[i], priv->encrypt_aes_regs->iv + i);
+	if (is_encrypt) {
+		for (i = 3; i >= 0; i--)
+			iowrite32(w_buf[i], priv->encrypt_aes_regs->iv + i);
+	} else {
+		for (i = 3; i >= 0; i--)
+			iowrite32(w_buf[i], priv->decrypt_aes_regs->iv + i);
+	}
 
 	return 0;
 }
@@ -337,7 +339,7 @@ static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	dst_sg = priv->dst_table.sgl;
 	dst_orig_sg = priv->dst_orig_table.sgl;
 
-	fpga_write_iv(desc->info);
+	fpga_write_iv(desc->info, is_encrypt);
 
 	priv->irq_done = 0;
 

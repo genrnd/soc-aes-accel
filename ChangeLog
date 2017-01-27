@@ -1,5 +1,10 @@
 aes-crypto-api-iface (0.0.1-1) unstable; urgency=low
   2017/01/27
+    ! aes-crypto-api-iface.c:
+        Fix -- we use a separate iv for each operation mode (encrypt & decrypt).
+      [dg]
+
+  2017/01/27
     + aes-crypto-api-iface.c:
         1) Add encrypt operation support.
            It is use separate control registers set for DMA & Crypto engine
