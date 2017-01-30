@@ -144,6 +144,8 @@
 			compatible = "etn,phc";
 		};
 
+		/* This node description is compatible with testing FPGA
+		 * firmware version 0.0.0-4 */
 		aes {
 			compatible = "stcmtk,aes";
 			interrupts = <0x0 0x28 0x1 /* decrypt irq */
