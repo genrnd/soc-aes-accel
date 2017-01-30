@@ -151,20 +151,15 @@ static int fpga_set_key(struct crypto_tfm *tfm, const u8 *in_key,
 	return 0;
 }
 
-static int fpga_write_iv(const u8 *iv, bool is_encrypt)
+static int fpga_write_iv(const u8 *iv, struct aes_priv_hwinfo *hw)
 {
 	int i;
 	const uint32_t *w_buf;
 
 	w_buf = (const uint32_t *)iv;
 
-	if (is_encrypt) {
-		for (i = 3; i >= 0; i--)
-			iowrite32(w_buf[i], priv->enc.aes_regs->iv + i);
-	} else {
-		for (i = 3; i >= 0; i--)
-			iowrite32(w_buf[i], priv->dec.aes_regs->iv + i);
-	}
+	for (i = 3; i >= 0; i--)
+		iowrite32(w_buf[i], hw->aes_regs->iv + i);
 
 	return 0;
 }
@@ -307,7 +302,8 @@ static void sg_unmap_all(struct device *dev, struct scatterlist *sg,
 		dma_unmap_page(dev, i->dma_address, i->length, dir);
 }
 
-static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_encrypt, bool is_dst)
+static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg,
+		struct aes_priv_hwinfo *hw, bool is_dst)
 {
 	struct scatterlist *i;
 	int err;
@@ -317,11 +313,7 @@ static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_e
 
 		irq_en = sg_is_last(i) && is_dst;
 
-		if (is_encrypt)
-			err = write_fpga_desc(priv, priv->enc.dma_regs, i->dma_address, i->length, irq_en, is_dst);
-		else
-			err = write_fpga_desc(priv, priv->dec.dma_regs, i->dma_address, i->length, irq_en, is_dst);
-
+		err = write_fpga_desc(priv, hw->dma_regs, i->dma_address, i->length, irq_en, is_dst);
 		if (err)
 			pr_err("write_dst_desc failed: %d\n", err);
 	}
@@ -330,7 +322,8 @@ static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_e
 #define SG_MAX_SIZE 20
 
 static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
-			struct scatterlist *src, unsigned int nbytes, bool is_encrypt)
+			struct scatterlist *src, unsigned int nbytes,
+			struct aes_priv_hwinfo *hw)
 {
 	int err;
 	struct scatterlist *i;
@@ -345,7 +338,7 @@ static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	dst_sg = priv->dst_table.sgl;
 	dst_orig_sg = priv->dst_orig_table.sgl;
 
-	fpga_write_iv(desc->info, is_encrypt);
+	fpga_write_iv(desc->info, hw);
 
 	priv->irq_done = 0;
 
@@ -374,8 +367,8 @@ static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	sg_map_all(priv->dev, dst_sg, DMA_FROM_DEVICE);
 
 	/* Start decryption by writing descriptors */
-	sg_feed_all(priv, dst_sg, is_encrypt, 1);
-	sg_feed_all(priv, src_sg, is_encrypt, 0);
+	sg_feed_all(priv, dst_sg, hw, 1);
+	sg_feed_all(priv, src_sg, hw, 0);
 
 	/* Wait for completion interrupt */
 	err = wait_event_interruptible(priv->irq_queue, priv->irq_done == 1);
@@ -398,7 +391,7 @@ static int fpga_encrypt(struct blkcipher_desc *desc,
 			struct scatterlist *dst,
 			struct scatterlist *src, unsigned int nbytes)
 {
-	return fpga_crypt(desc, dst, src, nbytes, 1);
+	return fpga_crypt(desc, dst, src, nbytes, &priv->enc);
 }
 
 
@@ -406,7 +399,7 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 			struct scatterlist *dst,
 			struct scatterlist *src, unsigned int nbytes)
 {
-	return fpga_crypt(desc, dst, src, nbytes, 0);
+	return fpga_crypt(desc, dst, src, nbytes, &priv->dec);
 }
 
 
