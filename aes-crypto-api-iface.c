@@ -454,15 +454,11 @@ static int aes_probe(struct platform_device *pdev)
 
 	priv->dev = &pdev->dev;
 
-	/*
-	priv->irq_decrypt = irq_of_parse_and_map(pdev->dev.of_node, 0);
-	BUG_ON(!priv->irq_decrypt);
+	priv->dec.irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
+	BUG_ON(!priv->dec.irq);
 
-	priv->irq_encrypt = irq_of_parse_and_map(pdev->dev.of_node, 1);
-	BUG_ON(!priv->irq_encrypt);
-	*/
-	priv->dec.irq = 72;
-	priv->enc.irq = 73;
+	priv->enc.irq = irq_of_parse_and_map(pdev->dev.of_node, 1);
+	BUG_ON(!priv->enc.irq);
 
 	dev_info(&pdev->dev, "decrypt irq = %d", priv->dec.irq);
 	dev_info(&pdev->dev, "encrypt irq = %d", priv->enc.irq);
