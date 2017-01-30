@@ -63,21 +63,27 @@ struct sg_meta_info {
 	bool          last;
 };
 
+/* This structure holds everypthing that is necessary to access an instance of
+ * hardware crypto accelerator.  It it instantiated twise for encryption and
+ * decryption. */
+struct aes_priv_hwinfo {
+	struct aes_regs __iomem *aes_regs;
+	struct netdma_regs __iomem *dma_regs;
+
+	int irq;
+};
+
 struct aes_priv {
 	uint32_t old_seq;
 	struct device *dev;
 
-	struct aes_regs __iomem *decrypt_aes_regs;
-	struct netdma_regs __iomem *decrypt_dma_regs;
-
-	struct aes_regs __iomem *encrypt_aes_regs;
-	struct netdma_regs __iomem *encrypt_dma_regs;
-
+	/* These fields are used by both encryption and decryption functions.
+	 * Looks like kernel crypto subsystem doesn't call them simultaneously
+	 * so sharing fields is ok. */
 	wait_queue_head_t irq_queue;
 	int irq_done;
 
-	int irq_decrypt;
-	int irq_encrypt;
+	struct aes_priv_hwinfo enc, dec;
 
 	struct sg_table dst_table;
 	struct page *dst_page;
@@ -137,10 +143,10 @@ static int fpga_set_key(struct crypto_tfm *tfm, const u8 *in_key,
 	w_buf = (const uint32_t *)in_key;
 
 	for (i = 3; i >= 0; i--)
-		iowrite32(w_buf[i], priv->decrypt_aes_regs->key + i);
+		iowrite32(w_buf[i], priv->dec.aes_regs->key + i);
 
 	for (i = 3; i >= 0; i--)
-		iowrite32(w_buf[i], priv->encrypt_aes_regs->key + i);
+		iowrite32(w_buf[i], priv->enc.aes_regs->key + i);
 
 	return 0;
 }
@@ -154,10 +160,10 @@ static int fpga_write_iv(const u8 *iv, bool is_encrypt)
 
 	if (is_encrypt) {
 		for (i = 3; i >= 0; i--)
-			iowrite32(w_buf[i], priv->encrypt_aes_regs->iv + i);
+			iowrite32(w_buf[i], priv->enc.aes_regs->iv + i);
 	} else {
 		for (i = 3; i >= 0; i--)
-			iowrite32(w_buf[i], priv->decrypt_aes_regs->iv + i);
+			iowrite32(w_buf[i], priv->dec.aes_regs->iv + i);
 	}
 
 	return 0;
@@ -312,9 +318,9 @@ static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg, bool is_e
 		irq_en = sg_is_last(i) && is_dst;
 
 		if (is_encrypt)
-			err = write_fpga_desc(priv, priv->encrypt_dma_regs, i->dma_address, i->length, irq_en, is_dst);
+			err = write_fpga_desc(priv, priv->enc.dma_regs, i->dma_address, i->length, irq_en, is_dst);
 		else
-			err = write_fpga_desc(priv, priv->decrypt_dma_regs, i->dma_address, i->length, irq_en, is_dst);
+			err = write_fpga_desc(priv, priv->dec.dma_regs, i->dma_address, i->length, irq_en, is_dst);
 
 		if (err)
 			pr_err("write_dst_desc failed: %d\n", err);
@@ -455,17 +461,17 @@ static int aes_probe(struct platform_device *pdev)
 	priv->irq_encrypt = irq_of_parse_and_map(pdev->dev.of_node, 1);
 	BUG_ON(!priv->irq_encrypt);
 	*/
-	priv->irq_decrypt = 72;
-	priv->irq_encrypt = 73;
+	priv->dec.irq = 72;
+	priv->enc.irq = 73;
 
-	dev_info(&pdev->dev, "decrypt irq = %d", priv->irq_decrypt);
-	dev_info(&pdev->dev, "encrypt irq = %d", priv->irq_encrypt);
+	dev_info(&pdev->dev, "decrypt irq = %d", priv->dec.irq);
+	dev_info(&pdev->dev, "encrypt irq = %d", priv->enc.irq);
 
-	priv->decrypt_aes_regs = ioremap(AES_BASE + DECRYPT_OFFSET, AES_SIZE);
-	priv->decrypt_dma_regs = ioremap(DMA_BASE + DECRYPT_OFFSET, DMA_SIZE);
+	priv->dec.aes_regs = ioremap(AES_BASE + DECRYPT_OFFSET, AES_SIZE);
+	priv->dec.dma_regs = ioremap(DMA_BASE + DECRYPT_OFFSET, DMA_SIZE);
 
-	priv->encrypt_aes_regs = ioremap(AES_BASE + ENCRYPT_OFFSET, AES_SIZE);
-	priv->encrypt_dma_regs = ioremap(DMA_BASE + ENCRYPT_OFFSET, DMA_SIZE);
+	priv->enc.aes_regs = ioremap(AES_BASE + ENCRYPT_OFFSET, AES_SIZE);
+	priv->enc.dma_regs = ioremap(DMA_BASE + ENCRYPT_OFFSET, DMA_SIZE);
 
 	priv->src = (void *)devm_get_free_pages(priv->dev, GFP_KERNEL, 0);
 	priv->dst = (void *)devm_get_free_pages(priv->dev, GFP_KERNEL, 0);
@@ -485,28 +491,27 @@ static int aes_probe(struct platform_device *pdev)
 	err = sg_alloc_table(&priv->dst_orig_table, SG_MAX_SIZE, GFP_KERNEL);
 	BUG_ON(err);
 
-	iowrite32(0, &priv->decrypt_aes_regs->main_ctrl);
-	iowrite32(1, &priv->decrypt_aes_regs->main_ctrl);
-	iowrite32(0, &priv->decrypt_aes_regs->main_ctrl);
+	iowrite32(0, &priv->dec.aes_regs->main_ctrl);
+	iowrite32(1, &priv->dec.aes_regs->main_ctrl);
+	iowrite32(0, &priv->dec.aes_regs->main_ctrl);
 
-	iowrite32(6, &priv->decrypt_dma_regs->control);
+	iowrite32(6, &priv->dec.dma_regs->control);
 
+	iowrite32(0, &priv->enc.aes_regs->main_ctrl);
+	iowrite32(1, &priv->enc.aes_regs->main_ctrl);
+	iowrite32(0, &priv->enc.aes_regs->main_ctrl);
 
-	iowrite32(0, &priv->encrypt_aes_regs->main_ctrl);
-	iowrite32(1, &priv->encrypt_aes_regs->main_ctrl);
-	iowrite32(0, &priv->encrypt_aes_regs->main_ctrl);
-
-	iowrite32(6, &priv->encrypt_dma_regs->control);
+	iowrite32(6, &priv->enc.dma_regs->control);
 
 	init_waitqueue_head(&priv->irq_queue);
 
-	err = request_irq(priv->irq_decrypt, fpga_isr, IRQF_SHARED, "fpga-aes-decrypt", priv);
+	err = request_irq(priv->dec.irq, fpga_isr, IRQF_SHARED, "fpga-aes-decrypt", priv);
 	if (err) {
 		dev_err(&pdev->dev, "request_irq for encrypt failed!");
 		return -ENOMEM;
 	}
 
-	err = request_irq(priv->irq_encrypt, fpga_isr, IRQF_SHARED, "fpga-aes-encrypt", priv);
+	err = request_irq(priv->enc.irq, fpga_isr, IRQF_SHARED, "fpga-aes-encrypt", priv);
 	if (err) {
 		dev_err(&pdev->dev, "request_irq for encrypt failed!");
 		return -ENOMEM;
@@ -522,8 +527,8 @@ static int aes_remove(struct platform_device *pdev)
 {
 	crypto_unregister_alg(&fpga_alg);
 
-	free_irq(priv->irq_decrypt, priv);
-	free_irq(priv->irq_encrypt, priv);
+	free_irq(priv->dec.irq, priv);
+	free_irq(priv->enc.irq, priv);
 
 	sg_free_table(&priv->src_table);
 	sg_free_table(&priv->dst_table);
@@ -532,11 +537,11 @@ static int aes_remove(struct platform_device *pdev)
 	dma_unmap_page(priv->dev, priv->src_dma, PAGE_SIZE, DMA_TO_DEVICE);
 	dma_unmap_page(priv->dev, priv->dst_dma, PAGE_SIZE, DMA_FROM_DEVICE);
 
-	iounmap(priv->decrypt_aes_regs);
-	iounmap(priv->decrypt_dma_regs);
+	iounmap(priv->dec.aes_regs);
+	iounmap(priv->dec.dma_regs);
 
-	iounmap(priv->encrypt_aes_regs);
-	iounmap(priv->encrypt_dma_regs);
+	iounmap(priv->enc.aes_regs);
+	iounmap(priv->enc.dma_regs);
 
 	dev_info(&pdev->dev, "device removed");
 
