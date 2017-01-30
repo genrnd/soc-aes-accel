@@ -434,6 +434,8 @@ struct crypto_alg fpga_alg = {
 
 static irqreturn_t fpga_isr(int irq, void *dev_id)
 {
+	struct aes_priv *priv = dev_id;
+
 	priv->irq_done = 1;
 	wake_up_interruptible(&priv->irq_queue);
 
