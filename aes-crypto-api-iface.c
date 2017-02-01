@@ -333,6 +333,7 @@ static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	struct scatterlist *old_dst_orig_sg;
 
 	BUG_ON(nbytes > PAGE_SIZE);
+	BUG_ON(nbytes % AES_BLOCK_SIZE != 0);
 
 	src_sg = priv->src_table.sgl;
 	dst_sg = priv->dst_table.sgl;
