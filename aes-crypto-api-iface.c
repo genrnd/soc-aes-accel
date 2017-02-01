@@ -56,11 +56,11 @@ struct netdma_regs {
 } __attribute__ ((packed, aligned(NETDMA_CSR_SIZE)));
 
 struct sg_meta_info {
-	int           sg_idx;
-	ssize_t       size;
-	ssize_t       sg_offset;
-	ssize_t       buff_offset;
-	bool          last;
+	void *from;
+	struct page *to_page;
+	ssize_t to_offset;
+	ssize_t len;
+	bool last;
 };
 
 /* This structure holds everypthing that is necessary to access an instance of
@@ -173,57 +173,43 @@ static void fpga_aes_exit(struct crypto_tfm *tfm)
 {
 }
 
-static void sg_copy_back(struct sg_meta_info *meta, struct scatterlist *sg, void *buff)
+static void sg_copy_back(struct sg_meta_info *meta)
 {
-	struct scatterlist *i;
-	int idx;
-	int sg_idx;
-	void *sg_page_ptr;
+	int i;
 
-	idx = 0;
-	sg_idx = 0;
+	for (i = 0; !meta[i].last; ++i) {
+		void *to;
 
-	for (i = sg; i; i = sg_next(i)) {
-		sg_page_ptr = kmap_atomic(sg_page(i));
-		BUG_ON(!sg_page_ptr);
+		to = kmap_atomic(meta[i].to_page);
 
-		while (meta[idx].sg_idx == sg_idx) {
-			memcpy(sg_page_ptr + i->offset + meta[idx].sg_offset, buff + meta[idx].buff_offset, meta[idx].size);
+		memcpy(to + meta[i].to_offset, meta[i].from, meta[i].len);
 
-			if (meta[idx].last)
-				break;
-
-			idx++;
-		}
-
-		sg_idx++;
-		kunmap_atomic(sg_page_ptr);
+		kunmap_atomic(to);
 	}
 }
 
-static void set_meta(struct sg_meta_info *meta, int idx, ssize_t size, ssize_t sg_offset, ssize_t buff_offset)
+static void set_meta(struct sg_meta_info *meta, struct page *to_page,
+		ssize_t to_offset, void *from, ssize_t len)
 {
-	meta->sg_idx      = idx;
-	meta->size        = size;
-	meta->sg_offset   = sg_offset;
-	meta->buff_offset = buff_offset;
-	meta->last        = 0;
+	meta->to_page = to_page;
+	meta->to_offset = to_offset;
+	meta->from = from;
+	meta->len = len;
 }
 
 static void sg_split_to_aligned(void *buff, struct page *page,
-				struct scatterlist *from, struct scatterlist *to, bool is_dst, struct sg_meta_info *meta)
+				struct scatterlist *from, struct scatterlist *to,
+				struct sg_meta_info *meta)
 {
 	struct scatterlist *sg;
 	struct scatterlist *old_to;
 	ssize_t buff_offset;
-	int sg_idx;
 	int meta_idx;
 
 	old_to = NULL;
 
 	buff_offset = 0;
 	meta_idx = 0;
-	sg_idx = 0;
 
 	for (sg = from; sg; sg = sg_next(sg)) {
 
@@ -252,9 +238,9 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 				to = sg_next(to);
 			}
 
-			if (is_dst) {
-				set_meta(&meta[meta_idx++], sg_idx++, second_len, first_len, buff_offset);
-				set_meta(&meta[meta_idx++], sg_idx, third_len, 0, buff_offset + second_len);
+			if (meta) {
+				set_meta(&meta[meta_idx++], sg_page(sg), sg->offset + first_len, buff + buff_offset, second_len);
+				set_meta(&meta[meta_idx++], sg_page(sgn), sgn->offset, buff + buff_offset + second_len, third_len);
 			} else {
 				memcpy(buff + buff_offset, sg_page_ptr + sg->offset + first_len, second_len);
 				memcpy(buff + buff_offset + second_len, sgn_page_ptr + sgn->offset, third_len);
@@ -278,7 +264,8 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 		}
 	}
 
-	meta[meta_idx - 1].last = 1;
+	if (meta)
+		meta[meta_idx].last = 1;
 	sg_mark_end(old_to);
 }
 
@@ -360,8 +347,8 @@ static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	dst_orig_sg = priv->dst_orig_table.sgl;
 
 	/* Align scatterlists provided to us */
-	sg_split_to_aligned(priv->src, priv->src_page, src, src_sg, 0, priv->meta);
-	sg_split_to_aligned(priv->dst, priv->dst_page, dst_orig_sg, dst_sg, 1, priv->meta);
+	sg_split_to_aligned(priv->src, priv->src_page, src, src_sg, NULL);
+	sg_split_to_aligned(priv->dst, priv->dst_page, dst_orig_sg, dst_sg, priv->meta);
 
 	/* Map memory chunk for passing to DMA controller */
 	sg_map_all(priv->dev, src_sg, DMA_TO_DEVICE);
@@ -378,11 +365,11 @@ static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 		return err;
 	}
 
-	sg_copy_back(priv->meta, dst, priv->dst);
-
 	/* Unmap chunks back */
 	sg_unmap_all(priv->dev, src_sg, DMA_TO_DEVICE);
 	sg_unmap_all(priv->dev, dst_sg, DMA_FROM_DEVICE);
+
+	sg_copy_back(priv->meta);
 
 	return err;
 }
