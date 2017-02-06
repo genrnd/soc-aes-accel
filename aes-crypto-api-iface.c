@@ -346,9 +346,13 @@ static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 
 	dst_orig_sg = priv->dst_orig_table.sgl;
 
+	dma_sync_single_for_cpu(priv->dev, priv->src_dma, PAGE_SIZE, DMA_TO_DEVICE);
+
 	/* Align scatterlists provided to us */
 	sg_split_to_aligned(priv->src, priv->src_page, src, src_sg, NULL);
 	sg_split_to_aligned(priv->dst, priv->dst_page, dst_orig_sg, dst_sg, priv->meta);
+
+	dma_sync_single_for_device(priv->dev, priv->src_dma, PAGE_SIZE, DMA_TO_DEVICE);
 
 	/* Map memory chunk for passing to DMA controller */
 	sg_map_all(priv->dev, src_sg, DMA_TO_DEVICE);
@@ -369,7 +373,11 @@ static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	sg_unmap_all(priv->dev, src_sg, DMA_TO_DEVICE);
 	sg_unmap_all(priv->dev, dst_sg, DMA_FROM_DEVICE);
 
+	dma_sync_single_for_cpu(priv->dev, priv->dst_dma, PAGE_SIZE, DMA_FROM_DEVICE);
+
 	sg_copy_back(priv->meta);
+
+	dma_sync_single_for_device(priv->dev, priv->dst_dma, PAGE_SIZE, DMA_FROM_DEVICE);
 
 	return err;
 }
