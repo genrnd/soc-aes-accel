@@ -67,6 +67,8 @@ Note that:
  * `reg` property must describe four address ranges: aes decryption core
    registers, aes decryption DMA core registers, and the same two for
    encryption cores.
+ * `reg-names` is optional property. You may set it to decorate contents of
+   /proc/iomem, it has no effect on driver behaviour.
 
 STC Metortek's SoC-based devices are shipped with custom fpga manager driver
 (`etn-fpga-mgr.ko`) installed while the upstream Altera's fpga manager (called
