@@ -7,3 +7,4 @@ modules.order
 Module.symvers
 .tmp_versions/*
 .svn/*
+*~
