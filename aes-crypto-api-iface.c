@@ -5,6 +5,7 @@
 #include <linux/printk.h>
 #include <linux/device.h>
 #include <linux/of_irq.h>
+#include <linux/of_address.h>
 #include <linux/interrupt.h>
 #include <crypto/algapi.h>
 #include <crypto/aes.h>
@@ -20,17 +21,6 @@
 
 #include <linux/kdev_t.h>
 #include "netdma.h"
-
-#define FPGASLAVES (0xC0000000)
-
-#define DMA_BASE (FPGASLAVES)
-#define DMA_SIZE (0x18)
-
-#define AES_BASE  (FPGASLAVES + 0x2000)
-#define AES_SIZE  (10 * 4)
-
-#define DECRYPT_OFFSET (0x0000)
-#define ENCRYPT_OFFSET (0x4000)
 
 #define AES_BLOCK_SIZE 16
 #define FPGA_AUXDATA    8
@@ -454,11 +444,19 @@ static int aes_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "decrypt irq = %d", priv->dec.irq);
 	dev_info(&pdev->dev, "encrypt irq = %d", priv->enc.irq);
 
-	priv->dec.aes_regs = ioremap(AES_BASE + DECRYPT_OFFSET, AES_SIZE);
-	priv->dec.dma_regs = ioremap(DMA_BASE + DECRYPT_OFFSET, DMA_SIZE);
+	/* TODO: call request_mem_region (or of_io_request_and_map) before
+	 * iomapping to make sure that we are the only user of these address
+	 * ranges
+	 */
+	priv->dec.aes_regs = of_iomap(pdev->dev.of_node, 0);
+	BUG_ON(!IS_ERR(priv->dec.aes_regs));
+	priv->dec.dma_regs = of_iomap(pdev->dev.of_node, 1);
+	BUG_ON(!IS_ERR(priv->dec.dma_regs));
 
-	priv->enc.aes_regs = ioremap(AES_BASE + ENCRYPT_OFFSET, AES_SIZE);
-	priv->enc.dma_regs = ioremap(DMA_BASE + ENCRYPT_OFFSET, DMA_SIZE);
+	priv->enc.aes_regs = of_iomap(pdev->dev.of_node, 2);
+	BUG_ON(!IS_ERR(priv->enc.aes_regs));
+	priv->enc.dma_regs = of_iomap(pdev->dev.of_node, 3);
+	BUG_ON(!IS_ERR(priv->enc.dma_regs));
 
 	priv->src = (void *)devm_get_free_pages(priv->dev, GFP_KERNEL, 0);
 	priv->dst = (void *)devm_get_free_pages(priv->dev, GFP_KERNEL, 0);
