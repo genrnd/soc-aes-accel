@@ -424,6 +424,7 @@ static irqreturn_t fpga_isr(int irq, void *dev_id)
 static int aes_probe(struct platform_device *pdev)
 {
 	int err;
+	struct resource res;
 
 	dev_info(&pdev->dev, "probing");
 
@@ -444,19 +445,21 @@ static int aes_probe(struct platform_device *pdev)
 	dev_info(&pdev->dev, "decrypt irq = %d", priv->dec.irq);
 	dev_info(&pdev->dev, "encrypt irq = %d", priv->enc.irq);
 
-	/* TODO: call request_mem_region (or of_io_request_and_map) before
-	 * iomapping to make sure that we are the only user of these address
-	 * ranges
-	 */
-	priv->dec.aes_regs = of_iomap(pdev->dev.of_node, 0);
-	BUG_ON(!IS_ERR(priv->dec.aes_regs));
-	priv->dec.dma_regs = of_iomap(pdev->dev.of_node, 1);
-	BUG_ON(!IS_ERR(priv->dec.dma_regs));
+	BUG_ON(of_address_to_resource(pdev->dev.of_node, 0, &res));
+	priv->dec.aes_regs = devm_ioremap_resource(&pdev->dev, &res);
+	BUG_ON(IS_ERR(priv->dec.aes_regs));
 
-	priv->enc.aes_regs = of_iomap(pdev->dev.of_node, 2);
-	BUG_ON(!IS_ERR(priv->enc.aes_regs));
-	priv->enc.dma_regs = of_iomap(pdev->dev.of_node, 3);
-	BUG_ON(!IS_ERR(priv->enc.dma_regs));
+	BUG_ON(of_address_to_resource(pdev->dev.of_node, 1, &res));
+	priv->dec.dma_regs = devm_ioremap_resource(&pdev->dev, &res);
+	BUG_ON(IS_ERR(priv->dec.dma_regs));
+
+	BUG_ON(of_address_to_resource(pdev->dev.of_node, 2, &res));
+	priv->enc.aes_regs = devm_ioremap_resource(&pdev->dev, &res);
+	BUG_ON(IS_ERR(priv->enc.aes_regs));
+
+	BUG_ON(of_address_to_resource(pdev->dev.of_node, 3, &res));
+	priv->enc.dma_regs = devm_ioremap_resource(&pdev->dev, &res);
+	BUG_ON(IS_ERR(priv->enc.dma_regs));
 
 	priv->src = (void *)devm_get_free_pages(priv->dev, GFP_KERNEL, 0);
 	priv->dst = (void *)devm_get_free_pages(priv->dev, GFP_KERNEL, 0);
@@ -521,12 +524,6 @@ static int aes_remove(struct platform_device *pdev)
 
 	dma_unmap_page(priv->dev, priv->src_dma, PAGE_SIZE, DMA_TO_DEVICE);
 	dma_unmap_page(priv->dev, priv->dst_dma, PAGE_SIZE, DMA_FROM_DEVICE);
-
-	iounmap(priv->dec.aes_regs);
-	iounmap(priv->dec.dma_regs);
-
-	iounmap(priv->enc.aes_regs);
-	iounmap(priv->enc.dma_regs);
 
 	dev_info(&pdev->dev, "device removed");
 
