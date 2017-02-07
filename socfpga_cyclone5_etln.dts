@@ -148,9 +148,9 @@
 		 * firmware version 0.0.0-4 */
 		aes {
 			compatible = "stcmtk,aes";
-			reg = <0xc0002000 10000       /* Decryptor AES regs base */
+			reg = <0xc0002000 0x28        /* Decryptor AES regs base */
 			       0xc0000000 0x18        /* Decryptor DMA regs base */
-			       0xc0006000 10000       /* Encryptor AES regs base */
+			       0xc0006000 0x28        /* Encryptor AES regs base */
 			       0xc0004000 0x18>;      /* Encryptor DMA regs base */
 			interrupts = <0x0 0x28 0x1 /* decrypt irq */
 				      0x0 0x29 0x1>; /* encrypt irq */
