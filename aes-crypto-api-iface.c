@@ -495,7 +495,7 @@ static int aes_probe(struct platform_device *pdev)
 
 	err = request_irq(priv->dec.irq, fpga_isr, IRQF_SHARED, "fpga-aes-decrypt", priv);
 	if (err) {
-		dev_err(&pdev->dev, "request_irq for encrypt failed!");
+		dev_err(&pdev->dev, "request_irq for decrypt failed!");
 		return -ENOMEM;
 	}
 
