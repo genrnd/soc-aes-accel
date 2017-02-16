@@ -11,8 +11,13 @@ export CROSS_COMPILE ARCH
 modules: $(wildcard *.c)
 	make -C $(KDIR) W=1 M=$(shell pwd) modules
 
+tools:
+	make -C $(shell pwd)/tools
+
 clean disclean:
 	make -C $(KDIR) M=$(shell pwd) $@
+
+.PHONY: tools
 
 else # We have been called by the Kbuild
 
