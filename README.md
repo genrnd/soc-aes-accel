@@ -1,10 +1,10 @@
 aes-crypto-api-iface
 ====================
 
-This directory contains sources of driver that we use to test FPGA firware
+This project contains the driver that we use to test FPGA firmware
 providing AES decryption hardware accelerator.
 
-It uses standard kernel Crypto-API interface. See:
+It uses the standard kernel Crypto-API interface. See:
   https://kernel.readthedocs.io/en/sphinx-samples/crypto-API.html
 
 
@@ -12,19 +12,20 @@ FILES
 -----
 
  * `aes-crypto-api-iface.c` -- the driver source code
- * `socfpga_cyclone5_etln.dts` -- sample DTS file containing decription of
+ * `socfpga_cyclone5_etln.dts` -- sample DTS file containing description of
    platform device handled by the driver
 
 BUILD
 -----
 
-Building the module is straingtforward:
+This project is built with the command commonly used for building kernel
+modules:
 
 ```shell
 make KDIR=path/to/prebuilt/kernel
 ```
 
-KDIR must contain a path to kernel sources.
+Here KDIR is the directory containing the kernel sources.
 
 In addition, one may want to pass `CROSS_COMPILE` parameter to `make` to change
 cross compilation toolchain prefix. The default `CROSS_COMPILE` value is
@@ -34,16 +35,16 @@ that was used to build a kernel.
 INSTALL
 -------
 
-After running the `make` described in the previous section you will obtain
-`aes-crypto-api-iface.ko` in the current directory. You may want to place it in
-`/usr/lib/modules/<kernel-version>/` on target machine and run `depmod` making
-the module load automatically once the kernel finds appropriate platform
-device. Or instead you can simply copy it to whatever directory on the target
-machine and `insmod` by hand.
+After building the project `aes-crypto-api-iface.ko` shall appear in the
+current directory. It is commonly placed in `/usr/lib/modules/<kernel-version>/`
+on the target machine; then one should run `depmod` so that the module is loaded
+automatically once the kernel finds appropriate platform device. Alternatively,
+it's possible to place the file anywhere on the target machine and then simply
+run `insmod` with its full path manually.
 
 The module provides a platform device driver that handles devices having
 `compatible` property equal to `stcmtk,aes`. For example, such device can be
-described in dts by the following lines:
+described in dts as such:
 
 ```dts
 my-aes-decryptor {
@@ -60,42 +61,44 @@ my-aes-decryptor {
 ```
 Note that:
 
- * `compatible` property must be exactly `stcmtk,aes`.
- * `interrputs` property must describe two interrupts that is issued by
-   decryption and encryption accelerators' DMA controllers in FPGA
-   respectively.
- * `reg` property must describe four address ranges: aes decryption core
-   registers, aes decryption DMA core registers, and the same two for
-   encryption cores.
- * `reg-names` is optional property. You may set it to decorate contents of
-   /proc/iomem, it has no effect on driver behaviour.
+ * the `compatible` property must be exactly `stcmtk,aes`.
+ * the `interrupts` property must describe two interrupts that are issued by
+   decryption and encryption accelerators' DMA controllers in the FPGA; the
+   interrupts must be listed in this order.
+ * the `reg` property must describe four address ranges:
+   * decryption core registers
+   * decryption DMA core registers
+   * encryption core registers
+   * encryption DMA core registers
+ * the `reg-names` property is optional. You may set it to influence the
+   contents of /proc/iomem, it has no effect on driver behaviour.
 
-STC Metortek's SoC-based devices are shipped with custom fpga manager driver
-(`etn-fpga-mgr.ko`) installed while the upstream Altera's fpga manager (called
+STC Metortek's SoC-based devices are shipped with custom FPGA manager driver
+(`etn-fpga-mgr.ko`) installed while the upstream Altera's FPGA manager (called
 `altera.ko` or `socfpga.ko`) device's node is disabled in dts. The Metrotek's
-fpga manager driver requires the FPGA firmware to have special capability
+FPGA manager driver requires the FPGA firmware to have a special capability
 called 'features'.
 
-At the moment of writing `aes-crypto-api-iface` driver the firmware providing
-hardware AES decryption accelerator device did not have 'features'. In order to
-run the firmware properly you have to disable the device handled by Metrotek's
-FPGA manager and enable Altera FPGA manager's device.
+At the moment of writing `aes-crypto-api-iface` the firmware providing hardware
+AES decryption accelerator device did not have 'features'. In order to run the
+firmware properly one has to disable the device handled by Metrotek's FPGA
+manager and enable Altera FPGA manager's device.
 
-The task of enabling proper FPGA manager and disabling the other as well as
-describing device tree node for the device handled by `aes-crypto-api-iface` are
-solved in `socfpga_cyclone5_etln.dts` DTS for ETLN that can be found in this
-directory. Make sure you boot with proper DTS.
+The `socfpga_cyclone5_etln.dts` file provided here enables Altera's FPGA
+manager and describes the device tree node for the device handled by
+`aes-crypto-api-iface`. It is applicable for ETL-N and can be used as a
+reference for writing other device tree specifications.
 
 USAGE
 -----
 
-Once you have compiled and installed the `aes-crypto-api-iface`, installed the
-proper FPGA firmware and booted the machine with proper DTS you may load the
+Once you have compiled, installed `aes-crypto-api-iface` and the proper
+FPGA firmware, and booted the machine with the proper DTS you may load the
 `aes-crypto-api-iface` module and start having fun.
 
-Once loaded the module registers an in-kernel cryptographic cipher that can be
-used by various consumers mostly in kernel. Userspace can put our hardware
-cipher to use through interfaces like `AF_ALG` socket family [2] or
+Once loaded, the module registers an in-kernel cipher that can be used by
+various consumers which are mostly in kernel. Userspace can access our
+hardware cipher through interfaces like `AF_ALG` socket family [2] or
 `cryptodev.ko` out-of-tree module [1].
 
 Minimal usage example of our module is presented below. It uses openssl in
@@ -133,9 +136,9 @@ time openssl aes-128-cbc -d -in ciphertext -out fpga_plaintext -K $(xxd -p key) 
 diff fpga_plaintext nofpga_plaintext
 ```
 
-The example above insmod's and rmmod's modules to switch between hardware and
-software encryption. We hope that there is a more convenient way to achieve
-this, but it is not known to us.
+The example above `insmod`s and `rmmod`s modules to switch between hardware and
+software implementations of encryption. We hope that there is a more convenient
+way to achieve this, but it is unknown to us.
 
 SEE ALSO
 --------
