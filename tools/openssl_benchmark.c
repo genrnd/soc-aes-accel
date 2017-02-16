@@ -7,6 +7,10 @@
 #include <openssl/err.h>
 #include <string.h>
 
+#include <stdlib.h>
+#include <stdbool.h>
+#include <unistd.h>
+
 void handleErrors(void)
 {
 	ERR_print_errors_fp(stderr);
@@ -91,8 +95,48 @@ int decrypt(unsigned char *ciphertext, int ciphertext_len, unsigned char *key,
 	return plaintext_len;
 }
 
-int main (void)
+void *allocate(int size, bool aligned)
 {
+	void *result;
+	int err;
+	const int PAGE_SIZE = getpagesize();
+
+	err = posix_memalign(&result, PAGE_SIZE, size + PAGE_SIZE);
+	if (err)
+		fprintf(stderr, "posix_memalign: %s\n", strerror(err)), exit(1);
+
+	result = aligned ? result : result + PAGE_SIZE - 1;
+
+	memset(result, 0, size);
+
+	return result;
+}
+
+void help(char *prog)
+{
+	fprintf(stderr, "%s <buffer size> (aligned|unaligned)\n", prog);
+}
+
+int main (int argc, char **argv)
+{
+	bool align;
+	int size;
+
+	/* Following code parses commandline arguments */
+	if (argc != 3)
+		return help(argv[0]), 1;
+
+	size = strtoll(argv[1], NULL, 0);
+	if (size == LONG_MAX || size == LONG_MIN || size < 0)
+		return perror("Something is wrong with first argument"), 1;
+
+	if (!strcmp(argv[2], "aligned"))
+		align = true;
+	else if (!strcmp(argv[2], "unaligned"))
+		align = false;
+	else
+		return fprintf(stderr, "The second argument must be exactly `aligned` on `unaligned`\n"), 1;
+
 	/* Set up the key and iv. Do I need to say to not hard code these in a
 	 * real application? :-)
 	 */
@@ -104,17 +148,16 @@ int main (void)
 	unsigned char *iv = (unsigned char *)"01234567890123456";
 
 	/* Message to be encrypted */
-	unsigned char *plaintext =
-		(unsigned char *)"The quick brown fox jumps over the lazy dog";
+	unsigned char *plaintext = allocate(size, align);
 
 	/* Buffer for ciphertext. Ensure the buffer is long enough for the
 	 * ciphertext which may be longer than the plaintext, dependant on the
 	 * algorithm and mode
 	 */
-	unsigned char ciphertext[128];
+	unsigned char *ciphertext = allocate(size + 16, align);
 
 	/* Buffer for the decrypted text */
-	unsigned char decryptedtext[128];
+	unsigned char *decryptedtext = allocate(size, align);;
 
 	int decryptedtext_len, ciphertext_len;
 
@@ -124,8 +167,7 @@ int main (void)
 	OPENSSL_config(NULL);
 
 	/* Encrypt the plaintext */
-	ciphertext_len = encrypt (plaintext, strlen ((char *)plaintext), key, iv,
-			ciphertext);
+	ciphertext_len = encrypt (plaintext, size, key, iv, ciphertext);
 
 	/* Do something useful with the ciphertext here */
 	printf("Ciphertext is:\n");
@@ -135,12 +177,9 @@ int main (void)
 	decryptedtext_len = decrypt(ciphertext, ciphertext_len, key, iv,
 			decryptedtext);
 
-	/* Add a NULL terminator. We are expecting printable text */
-	decryptedtext[decryptedtext_len] = '\0';
-
 	/* Show the decrypted text */
 	printf("Decrypted text is:\n");
-	printf("%s\n", decryptedtext);
+	BIO_dump_fp (stdout, (const char *)decryptedtext, decryptedtext_len);
 
 	/* Clean up */
 	EVP_cleanup();
