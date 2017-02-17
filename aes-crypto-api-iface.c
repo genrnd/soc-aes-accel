@@ -318,7 +318,7 @@ static void sg_feed_all(struct scatterlist *src, struct scatterlist *dst,
 	}
 }
 
-#define SG_MAX_SIZE 20
+#define SG_MAX_SIZE 200
 
 static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 			struct scatterlist *src, unsigned int nbytes,
@@ -331,7 +331,6 @@ static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	struct scatterlist *dst_orig_sg;
 	struct scatterlist *old_dst_orig_sg;
 
-	BUG_ON(nbytes > PAGE_SIZE);
 	BUG_ON(nbytes % AES_BLOCK_SIZE != 0);
 
 	src_sg = priv->src_table.sgl;
