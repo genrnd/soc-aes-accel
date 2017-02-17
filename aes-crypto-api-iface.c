@@ -100,9 +100,7 @@ static int write_fpga_desc(struct netdma_regs __iomem *regs,
 	control_field = (length << DESC_BYTECOUNT_OFFSET) |
 	    (!irq_is_en << DESC_DISABLE_IRQ_OFFSET);
 
-	if (ioread32(&regs->status) & STAT_TX_DESC_BUFFER_FULL) {
-		return -ENOMEM;
-	}
+	while (ioread32(&regs->status) & STAT_TX_DESC_BUFFER_FULL);
 
 	if (is_dst) {
 		iowrite32(dma_address, &regs->dst_desc);
@@ -307,10 +305,8 @@ static void sg_feed_all(struct scatterlist *src, struct scatterlist *dst,
 
 		irq_en = sg_is_last(sg) && is_dst;
 
-		do
-			err = write_fpga_desc(hw->dma_regs, sg->dma_address, sg->length,
-					irq_en, is_dst);
-		while (err == -ENOMEM);
+		err = write_fpga_desc(hw->dma_regs, sg->dma_address, sg->length,
+				irq_en, is_dst);
 		if (err)
 			pr_err("write_dst_desc failed: %d\n", err);
 	}
