@@ -123,6 +123,7 @@ int main (int argc, char **argv)
 	bool enc;
 	int i;
 	int size;
+	int ciphretext_size;
 	int count;
 
 	/* Following code parses commandline arguments */
@@ -175,11 +176,14 @@ int main (int argc, char **argv)
 	OpenSSL_add_all_algorithms();
 	OPENSSL_config(NULL);
 
+	if (!enc)
+		ciphertext_size = encrypt(plaintext, size, key, iv, ciphertext);
+
 	for (i = 0; i < count; ++i)
 		if (enc)
 			encrypt(plaintext, size, key, iv, ciphertext);
 		else
-			decrypt(ciphertext, size, key, iv, plaintext);
+			decrypt(ciphertext, ciphertext_size, key, iv, plaintext);
 
 	/* Clean up */
 	EVP_cleanup();
