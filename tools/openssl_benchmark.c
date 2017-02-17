@@ -114,28 +114,42 @@ void *allocate(int size, bool aligned)
 
 void help(char *prog)
 {
-	fprintf(stderr, "%s <buffer size> (aligned|unaligned)\n", prog);
+	fprintf(stderr, "%s <buffer size> <operation count> (encrypt|decrypt) (aligned|unaligned)\n", prog);
 }
 
 int main (int argc, char **argv)
 {
 	bool align;
+	bool enc;
+	int i;
 	int size;
+	int count;
 
 	/* Following code parses commandline arguments */
-	if (argc != 3)
-		return help(argv[0]), 1;
+	if (argc != 5)
+		return fprintf(stderr, "You must provide exacly 5 arguments\n"), help(argv[0]), 1;
 
 	size = strtoll(argv[1], NULL, 0);
 	if (size == LONG_MAX || size == LONG_MIN || size < 0)
 		return perror("Something is wrong with first argument"), 1;
 
-	if (!strcmp(argv[2], "aligned"))
+	count = strtoll(argv[2], NULL, 0);
+	if (count == LONG_MAX || count == LONG_MIN || count < 0)
+		return perror("Something is wrong with first argument"), 1;
+
+	if (!strcmp(argv[3], "encrypt"))
+		enc = true;
+	else if (!strcmp(argv[3], "decrypt"))
+		enc = false;
+	else
+		return fprintf(stderr, "The third argument must be exactly `encrypt` or `decrypt`\n"), 1;
+
+	if (!strcmp(argv[4], "aligned"))
 		align = true;
-	else if (!strcmp(argv[2], "unaligned"))
+	else if (!strcmp(argv[4], "unaligned"))
 		align = false;
 	else
-		return fprintf(stderr, "The second argument must be exactly `aligned` on `unaligned`\n"), 1;
+		return fprintf(stderr, "The fourth argument must be exactly `aligned` or `unaligned`\n"), 1;
 
 	/* Set up the key and iv. Do I need to say to not hard code these in a
 	 * real application? :-)
@@ -156,30 +170,16 @@ int main (int argc, char **argv)
 	 */
 	unsigned char *ciphertext = allocate(size + 16, align);
 
-	/* Buffer for the decrypted text */
-	unsigned char *decryptedtext = allocate(size, align);;
-
-	int decryptedtext_len, ciphertext_len;
-
 	/* Initialise the library */
 	ERR_load_crypto_strings();
 	OpenSSL_add_all_algorithms();
 	OPENSSL_config(NULL);
 
-	/* Encrypt the plaintext */
-	ciphertext_len = encrypt (plaintext, size, key, iv, ciphertext);
-
-	/* Do something useful with the ciphertext here */
-	printf("Ciphertext is:\n");
-	BIO_dump_fp (stdout, (const char *)ciphertext, ciphertext_len);
-
-	/* Decrypt the ciphertext */
-	decryptedtext_len = decrypt(ciphertext, ciphertext_len, key, iv,
-			decryptedtext);
-
-	/* Show the decrypted text */
-	printf("Decrypted text is:\n");
-	BIO_dump_fp (stdout, (const char *)decryptedtext, decryptedtext_len);
+	for (i = 0; i < count; ++i)
+		if (enc)
+			encrypt(plaintext, size, key, iv, ciphertext);
+		else
+			decrypt(ciphertext, size, key, iv, plaintext);
 
 	/* Clean up */
 	EVP_cleanup();
