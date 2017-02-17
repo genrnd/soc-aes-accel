@@ -101,8 +101,6 @@ static int write_fpga_desc(struct netdma_regs __iomem *regs,
 	    (!irq_is_en << DESC_DISABLE_IRQ_OFFSET);
 
 	if (ioread32(&regs->status) & STAT_TX_DESC_BUFFER_FULL) {
-		pr_err("%s descriptor buffer full bit is set. Address = 0x%x\n",
-		       is_dst ? "rx" : "tx", dma_address);
 		return -ENOMEM;
 	}
 
