@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <time.h>
 
 void handleErrors(void)
 {
@@ -123,8 +124,10 @@ int main (int argc, char **argv)
 	bool enc;
 	int i;
 	int size;
-	int ciphretext_size;
+	int ciphertext_size;
 	int count;
+
+	struct timespec start, end;
 
 	/* Following code parses commandline arguments */
 	if (argc != 5)
@@ -179,11 +182,25 @@ int main (int argc, char **argv)
 	if (!enc)
 		ciphertext_size = encrypt(plaintext, size, key, iv, ciphertext);
 
+	clock_gettime(CLOCK_REALTIME, &start);
+
 	for (i = 0; i < count; ++i)
 		if (enc)
 			encrypt(plaintext, size, key, iv, ciphertext);
 		else
 			decrypt(ciphertext, ciphertext_size, key, iv, plaintext);
+
+	clock_gettime(CLOCK_REALTIME, &end);
+
+	end.tv_sec  -= start.tv_sec;
+	end.tv_nsec -= start.tv_nsec;
+
+	if (end.tv_nsec < 0) {
+		end.tv_sec--;
+		end.tv_nsec += 1000 * 1000 * 1000;
+	}
+
+	printf("%d.%09d\n", (int)end.tv_sec, (int)end.tv_nsec);
 
 	/* Clean up */
 	EVP_cleanup();
