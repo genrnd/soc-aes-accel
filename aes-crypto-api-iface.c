@@ -92,7 +92,7 @@ struct aes_priv {
 
 struct aes_priv *priv;
 
-static int write_fpga_desc(struct aes_priv *priv, struct netdma_regs __iomem *regs,
+static int write_fpga_desc(struct netdma_regs __iomem *regs,
 		u32 dma_address, u16 length, u8 irq_is_en, u8 is_dst)
 {
 	u32 control_field;
@@ -279,8 +279,7 @@ static void sg_unmap_all(struct device *dev, struct scatterlist *sg,
 		dma_unmap_page(dev, i->dma_address, i->length, dir);
 }
 
-static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg,
-		struct aes_priv_hwinfo *hw, bool is_dst)
+static void sg_feed_all(struct scatterlist *sg, struct aes_priv_hwinfo *hw, bool is_dst)
 {
 	struct scatterlist *i;
 	int err;
@@ -290,7 +289,7 @@ static void sg_feed_all(struct aes_priv *priv, struct scatterlist *sg,
 
 		irq_en = sg_is_last(i) && is_dst;
 
-		err = write_fpga_desc(priv, hw->dma_regs, i->dma_address, i->length, irq_en, is_dst);
+		err = write_fpga_desc(hw->dma_regs, i->dma_address, i->length, irq_en, is_dst);
 		if (err)
 			pr_err("write_dst_desc failed: %d\n", err);
 	}
@@ -349,8 +348,8 @@ static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	sg_map_all(priv->dev, dst_sg, DMA_FROM_DEVICE);
 
 	/* Start decryption by writing descriptors */
-	sg_feed_all(priv, dst_sg, hw, 1);
-	sg_feed_all(priv, src_sg, hw, 0);
+	sg_feed_all(dst_sg, hw, 1);
+	sg_feed_all(src_sg, hw, 0);
 
 	/* Wait for completion interrupt */
 	err = wait_event_interruptible(priv->irq_queue, priv->irq_done == 1);
