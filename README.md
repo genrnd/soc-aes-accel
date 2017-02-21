@@ -1,5 +1,5 @@
-aes-crypto-api-iface
-====================
+soc-aes-accel
+=============
 
 This project contains the driver that we use to test FPGA firmware
 providing AES decryption hardware accelerator.
@@ -11,7 +11,7 @@ It uses the standard kernel Crypto-API interface. See:
 FILES
 -----
 
- * `aes-crypto-api-iface.c` -- the driver source code
+ * `soc-aes-accel.c` -- the driver source code
  * `socfpga_cyclone5_etln.dts` -- sample DTS file containing description of
    platform device handled by the driver
 
@@ -35,7 +35,7 @@ that was used to build a kernel.
 INSTALL
 -------
 
-After building the project `aes-crypto-api-iface.ko` shall appear in the
+After building the project `soc-aes-accel.ko` shall appear in the
 current directory. It is commonly placed in `/usr/lib/modules/<kernel-version>/`
 on the target machine; then one should run `depmod` so that the module is loaded
 automatically once the kernel finds appropriate platform device. Alternatively,
@@ -79,22 +79,22 @@ STC Metortek's SoC-based devices are shipped with custom FPGA manager driver
 FPGA manager driver requires the FPGA firmware to have a special capability
 called 'features'.
 
-At the moment of writing `aes-crypto-api-iface` the firmware providing hardware
+At the moment of writing `soc-aes-accel` the firmware providing hardware
 AES decryption accelerator device did not have 'features'. In order to run the
 firmware properly one has to disable the device handled by Metrotek's FPGA
 manager and enable Altera FPGA manager's device.
 
 The `socfpga_cyclone5_etln.dts` file provided here enables Altera's FPGA
 manager and describes the device tree node for the device handled by
-`aes-crypto-api-iface`. It is applicable for ETL-N and can be used as a
+`soc-aes-accel`. It is applicable for ETL-N and can be used as a
 reference for writing other device tree specifications.
 
 USAGE
 -----
 
-Once you have compiled, installed `aes-crypto-api-iface` and the proper
+Once you have compiled, installed `soc-aes-accel` and the proper
 FPGA firmware, and booted the machine with the proper DTS you may load the
-`aes-crypto-api-iface` module and start having fun.
+`soc-aes-accel` module and start having fun.
 
 Once loaded, the module registers an in-kernel cipher that can be used by
 various consumers which are mostly in kernel. Userspace can access our
@@ -122,12 +122,12 @@ dd bs=1 count=16 if=/dev/urandom of=key
 dd bs=1 count=16 if=/dev/urandom of=iv
 
 # Decrypt ciphertext without FPGA acceleration (make sure that
-# `aes-crypto-api-iface` and `cryptodev` modules are not loaded)
+# `soc-aes-accel` and `cryptodev` modules are not loaded)
 time openssl aes-128-cbc -d -in ciphertext -out nofpga_plaintext -K $(xxd -p key) -nopad -iv $(xxd -p iv)
 
 # Load modules
 insmod <your-path>/cryptodev.ko
-insmod <your-path>/aes-crypto-api-iface.ko
+insmod <your-path>/soc-aes-accel.ko
 
 # Decrypt ciphertext with FPGA acceleration
 time openssl aes-128-cbc -d -in ciphertext -out fpga_plaintext -K $(xxd -p key) -nopad -iv $(xxd -p iv)

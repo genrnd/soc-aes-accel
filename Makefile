@@ -24,6 +24,6 @@ clean disclean:
 else # We have been called by the Kbuild
 
 subdir-ccflags-y := -Wno-sign-compare
-obj-m += aes-crypto-api-iface.o
+obj-m += soc-aes-accel.o
 
 endif # KERNELRELEASE
