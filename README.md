@@ -14,6 +14,7 @@ FILES
  * `soc-aes-accel.c` -- the driver source code
  * `socfpga_cyclone5_etln.dts` -- sample DTS file containing description of
    platform device handled by the driver
+ * `tools/` -- Userspace utilities for testing and benchmarking the driver
 
 BUILD
 -----
