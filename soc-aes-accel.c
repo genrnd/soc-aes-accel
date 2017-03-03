@@ -507,13 +507,15 @@ static int aes_probe(struct platform_device *pdev)
 
 	init_waitqueue_head(&priv->irq_queue);
 
-	err = request_irq(priv->dec.irq, fpga_isr, IRQF_SHARED, "fpga-aes-decrypt", priv);
+	err = devm_request_irq(priv->dev, priv->dec.irq, fpga_isr, IRQF_SHARED,
+			"fpga-aes-decrypt", priv);
 	if (err) {
 		dev_err(&pdev->dev, "request_irq for decrypt failed!");
 		return -ENOMEM;
 	}
 
-	err = request_irq(priv->enc.irq, fpga_isr, IRQF_SHARED, "fpga-aes-encrypt", priv);
+	err = devm_request_irq(priv->dev, priv->enc.irq, fpga_isr, IRQF_SHARED,
+			"fpga-aes-encrypt", priv);
 	if (err) {
 		dev_err(&pdev->dev, "request_irq for encrypt failed!");
 		return -ENOMEM;
@@ -529,8 +531,12 @@ static int aes_remove(struct platform_device *pdev)
 {
 	crypto_unregister_alg(&fpga_alg);
 
-	free_irq(priv->dec.irq, priv);
-	free_irq(priv->enc.irq, priv);
+	/* Although devres may free IRQs for us, we free them implicitly before
+	 * any other resources to make sure that interrupt handler won't access
+	 * any of them.
+	 */
+	devm_free_irq(priv->dev, priv->dec.irq, priv);
+	devm_free_irq(priv->dev, priv->enc.irq, priv);
 
 	sg_free_table(&priv->src_table);
 	sg_free_table(&priv->dst_table);
