@@ -529,6 +529,9 @@ static int aes_probe(struct platform_device *pdev)
 
 static int aes_remove(struct platform_device *pdev)
 {
+	/* This must be done before anything else to be sure that no users call
+	 * us when some resuorces are not initialized
+	 */
 	crypto_unregister_alg(&fpga_alg);
 
 	/* Although devres may free IRQs for us, we free them implicitly before
