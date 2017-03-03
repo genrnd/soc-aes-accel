@@ -435,6 +435,18 @@ static irqreturn_t fpga_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static void aes_reset(struct aes_priv_hwinfo *hw)
+{
+	/* These three writes reset the aes hardware */
+	iowrite32(0, &hw->aes_regs->main_ctrl);
+	iowrite32(1, &hw->aes_regs->main_ctrl);
+	iowrite32(0, &hw->aes_regs->main_ctrl);
+
+	/* WTF? What does 6 mean? */
+	iowrite32(6, &hw->dma_regs->control);
+
+}
+
 static int aes_probe(struct platform_device *pdev)
 {
 	int err;
@@ -493,17 +505,8 @@ static int aes_probe(struct platform_device *pdev)
 	err = sg_alloc_table(&priv->dst_orig_table, SG_MAX_SIZE, GFP_KERNEL);
 	BUG_ON(err);
 
-	iowrite32(0, &priv->dec.aes_regs->main_ctrl);
-	iowrite32(1, &priv->dec.aes_regs->main_ctrl);
-	iowrite32(0, &priv->dec.aes_regs->main_ctrl);
-
-	iowrite32(6, &priv->dec.dma_regs->control);
-
-	iowrite32(0, &priv->enc.aes_regs->main_ctrl);
-	iowrite32(1, &priv->enc.aes_regs->main_ctrl);
-	iowrite32(0, &priv->enc.aes_regs->main_ctrl);
-
-	iowrite32(6, &priv->enc.dma_regs->control);
+	aes_reset(&priv->dec);
+	aes_reset(&priv->enc);
 
 	init_waitqueue_head(&priv->irq_queue);
 
