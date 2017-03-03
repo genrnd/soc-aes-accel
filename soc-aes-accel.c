@@ -99,7 +99,7 @@ struct aes_priv *priv;
 
 
 static int fpga_write_desc(struct netdma_regs __iomem *regs,
-		u32 dma_address, u16 length, u8 irq_is_en, u8 is_dst)
+		u32 dma_address, u16 length, u8 irq_is_en, bool is_dst)
 {
 	u32 control_field;
 
