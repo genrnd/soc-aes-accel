@@ -66,13 +66,15 @@ struct aes_priv_hwinfo {
 struct aes_priv {
 	struct device *dev;
 
-	/* These fields are used by both encryption and decryption functions.
-	 * Looks like kernel crypto subsystem doesn't call them simultaneously
-	 * so sharing fields is ok. */
+	struct aes_priv_hwinfo enc, dec;
+
+	/* All of the following fields are used by both encryption and
+	 * decryption functions.  Looks like kernel crypto subsystem doesn't
+	 * call them simultaneously so sharing fields is ok.
+	 */
+
 	wait_queue_head_t irq_queue;
 	int irq_done;
-
-	struct aes_priv_hwinfo enc, dec;
 
 	struct sg_table dst_table;
 	struct page *dst_page;
