@@ -96,7 +96,7 @@ struct aes_priv {
  */
 struct aes_priv *priv;
 
-static int write_fpga_desc(struct netdma_regs __iomem *regs,
+static int fpga_write_desc(struct netdma_regs __iomem *regs,
 		u32 dma_address, u16 length, u8 irq_is_en, u8 is_dst)
 {
 	u32 control_field;
@@ -309,7 +309,7 @@ static void sg_feed_all(struct scatterlist *src, struct scatterlist *dst,
 
 		irq_en = sg_is_last(sg) && is_dst;
 
-		err = write_fpga_desc(hw->dma_regs, sg->dma_address, sg->length,
+		err = fpga_write_desc(hw->dma_regs, sg->dma_address, sg->length,
 				irq_en, is_dst);
 		if (err)
 			pr_err("write_dst_desc failed: %d\n", err);
