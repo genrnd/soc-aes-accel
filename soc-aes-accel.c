@@ -106,7 +106,7 @@ static int fpga_write_desc(struct netdma_regs __iomem *regs,
 	control_field = (length << DESC_BYTECOUNT_OFFSET) |
 	    (!irq_is_en << DESC_DISABLE_IRQ_OFFSET);
 
-	while (ioread32(&regs->status) & STAT_TX_DESC_BUFFER_FULL);
+	while (ioread32(&regs->status) & (is_dst ? STAT_RX_DESC_BUFFER_FULL : STAT_TX_DESC_BUFFER_FULL ));
 
 	if (is_dst) {
 		iowrite32(dma_address, &regs->dst_desc);
