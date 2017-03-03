@@ -444,13 +444,44 @@ static void aes_reset(struct aes_priv_hwinfo *hw)
 
 	/* WTF? What does 6 mean? */
 	iowrite32(6, &hw->dma_regs->control);
+}
 
+/* aes_parse_of_resources - Parse `reg` and `interrupts` DT properties and also
+ * ioremap registers.
+ *
+ * Be aware that this function doesn't request_irq for you
+ */
+static void aes_parse_of_resources(struct device *dev, struct aes_priv_hwinfo *dec,
+		struct aes_priv_hwinfo *enc, struct device_node *of_node)
+{
+	struct resource res;
+
+	dec->irq = irq_of_parse_and_map(of_node, 0);
+	BUG_ON(!dec->irq);
+
+	enc->irq = irq_of_parse_and_map(of_node, 1);
+	BUG_ON(!enc->irq);
+
+	BUG_ON(of_address_to_resource(of_node, 0, &res));
+	dec->aes_regs = devm_ioremap_resource(dev, &res);
+	BUG_ON(IS_ERR(dec->aes_regs));
+
+	BUG_ON(of_address_to_resource(of_node, 1, &res));
+	dec->dma_regs = devm_ioremap_resource(dev, &res);
+	BUG_ON(IS_ERR(dec->dma_regs));
+
+	BUG_ON(of_address_to_resource(of_node, 2, &res));
+	enc->aes_regs = devm_ioremap_resource(dev, &res);
+	BUG_ON(IS_ERR(enc->aes_regs));
+
+	BUG_ON(of_address_to_resource(of_node, 3, &res));
+	enc->dma_regs = devm_ioremap_resource(dev, &res);
+	BUG_ON(IS_ERR(enc->dma_regs));
 }
 
 static int aes_probe(struct platform_device *pdev)
 {
 	int err;
-	struct resource res;
 
 	dev_info(&pdev->dev, "probing");
 
@@ -462,30 +493,9 @@ static int aes_probe(struct platform_device *pdev)
 
 	priv->dev = &pdev->dev;
 
-	priv->dec.irq = irq_of_parse_and_map(pdev->dev.of_node, 0);
-	BUG_ON(!priv->dec.irq);
-
-	priv->enc.irq = irq_of_parse_and_map(pdev->dev.of_node, 1);
-	BUG_ON(!priv->enc.irq);
-
+	aes_parse_of_resources(priv->dev, &priv->dec, &priv->enc, pdev->dev.of_node);
 	dev_info(&pdev->dev, "decrypt irq = %d", priv->dec.irq);
 	dev_info(&pdev->dev, "encrypt irq = %d", priv->enc.irq);
-
-	BUG_ON(of_address_to_resource(pdev->dev.of_node, 0, &res));
-	priv->dec.aes_regs = devm_ioremap_resource(&pdev->dev, &res);
-	BUG_ON(IS_ERR(priv->dec.aes_regs));
-
-	BUG_ON(of_address_to_resource(pdev->dev.of_node, 1, &res));
-	priv->dec.dma_regs = devm_ioremap_resource(&pdev->dev, &res);
-	BUG_ON(IS_ERR(priv->dec.dma_regs));
-
-	BUG_ON(of_address_to_resource(pdev->dev.of_node, 2, &res));
-	priv->enc.aes_regs = devm_ioremap_resource(&pdev->dev, &res);
-	BUG_ON(IS_ERR(priv->enc.aes_regs));
-
-	BUG_ON(of_address_to_resource(pdev->dev.of_node, 3, &res));
-	priv->enc.dma_regs = devm_ioremap_resource(&pdev->dev, &res);
-	BUG_ON(IS_ERR(priv->enc.dma_regs));
 
 	priv->src = (void *)devm_get_free_pages(priv->dev, GFP_KERNEL, 0);
 	priv->dst = (void *)devm_get_free_pages(priv->dev, GFP_KERNEL, 0);
