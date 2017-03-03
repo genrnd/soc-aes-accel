@@ -64,7 +64,6 @@ struct aes_priv_hwinfo {
 };
 
 struct aes_priv {
-	uint32_t old_seq;
 	struct device *dev;
 
 	/* These fields are used by both encryption and decryption functions.
