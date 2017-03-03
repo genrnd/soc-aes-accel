@@ -91,6 +91,9 @@ struct aes_priv {
 	struct sg_meta_info *meta;
 };
 
+/* TODO: Figure out the proper way of passing CryptoAPI transformation context
+ * and get rid of this global variable.
+ */
 struct aes_priv *priv;
 
 static int write_fpga_desc(struct netdma_regs __iomem *regs,
