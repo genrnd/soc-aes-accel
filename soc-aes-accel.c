@@ -116,7 +116,6 @@ static int fpga_write_desc(struct netdma_regs __iomem *regs,
 		iowrite32(control_field, &regs->src_desc);
 	}
 
-	wmb();
 	return 0;
 }
 
