@@ -91,10 +91,12 @@ struct aes_priv {
 	struct sg_meta_info *meta;
 };
 
+
 /* TODO: Figure out the proper way of passing CryptoAPI transformation context
  * and get rid of this global variable.
  */
 struct aes_priv *priv;
+
 
 static int fpga_write_desc(struct netdma_regs __iomem *regs,
 		u32 dma_address, u16 length, u8 irq_is_en, u8 is_dst)
@@ -117,6 +119,7 @@ static int fpga_write_desc(struct netdma_regs __iomem *regs,
 	wmb();
 	return 0;
 }
+
 
 static int fpga_set_key(struct crypto_tfm *tfm, const u8 *in_key,
 			unsigned int key_len)
@@ -141,6 +144,7 @@ static int fpga_set_key(struct crypto_tfm *tfm, const u8 *in_key,
 	return 0;
 }
 
+
 static int fpga_write_iv(const u8 *iv, struct aes_priv_hwinfo *hw)
 {
 	int i;
@@ -154,14 +158,17 @@ static int fpga_write_iv(const u8 *iv, struct aes_priv_hwinfo *hw)
 	return 0;
 }
 
+
 static int fpga_aes_init(struct crypto_tfm *tfm)
 {
 	return 0;
 }
 
+
 static void fpga_aes_exit(struct crypto_tfm *tfm)
 {
 }
+
 
 static void sg_copy_back(struct sg_meta_info *meta)
 {
@@ -178,6 +185,7 @@ static void sg_copy_back(struct sg_meta_info *meta)
 	}
 }
 
+
 static void set_meta(struct sg_meta_info *meta, struct page *to_page,
 		ssize_t to_offset, void *from, ssize_t len)
 {
@@ -186,6 +194,7 @@ static void set_meta(struct sg_meta_info *meta, struct page *to_page,
 	meta->from = from;
 	meta->len = len;
 }
+
 
 static void sg_split_to_aligned(void *buff, struct page *page,
 				struct scatterlist *from, struct scatterlist *to,
@@ -259,6 +268,7 @@ static void sg_split_to_aligned(void *buff, struct page *page,
 	sg_mark_end(old_to);
 }
 
+
 static void sg_map_all(struct device *dev, struct scatterlist *sg,
 		       enum dma_data_direction dir)
 {
@@ -270,6 +280,7 @@ static void sg_map_all(struct device *dev, struct scatterlist *sg,
 	}
 }
 
+
 static void sg_unmap_all(struct device *dev, struct scatterlist *sg,
 			 enum dma_data_direction dir)
 {
@@ -278,6 +289,7 @@ static void sg_unmap_all(struct device *dev, struct scatterlist *sg,
 	for (i = sg; i; i = sg_next(i))
 		dma_unmap_page(dev, i->dma_address, i->length, dir);
 }
+
 
 static void sg_feed_all(struct scatterlist *src, struct scatterlist *dst,
 		struct aes_priv_hwinfo *hw)
@@ -315,6 +327,7 @@ static void sg_feed_all(struct scatterlist *src, struct scatterlist *dst,
 			pr_err("write_dst_desc failed: %d\n", err);
 	}
 }
+
 
 #define SG_MAX_SIZE 200
 
@@ -429,6 +442,7 @@ struct crypto_alg fpga_alg = {
 	}
 };
 
+
 static irqreturn_t fpga_isr(int irq, void *dev_id)
 {
 	struct aes_priv *priv = dev_id;
@@ -438,6 +452,7 @@ static irqreturn_t fpga_isr(int irq, void *dev_id)
 
 	return IRQ_HANDLED;
 }
+
 
 static void aes_reset(struct aes_priv_hwinfo *hw)
 {
@@ -449,6 +464,7 @@ static void aes_reset(struct aes_priv_hwinfo *hw)
 	/* WTF? What does 6 mean? */
 	iowrite32(6, &hw->dma_regs->control);
 }
+
 
 /* aes_parse_of_resources - Parse `reg` and `interrupts` DT properties and also
  * ioremap registers.
@@ -482,6 +498,7 @@ static void aes_parse_of_resources(struct device *dev, struct aes_priv_hwinfo *d
 	enc->dma_regs = devm_ioremap_resource(dev, &res);
 	BUG_ON(IS_ERR(enc->dma_regs));
 }
+
 
 static int aes_probe(struct platform_device *pdev)
 {
@@ -538,6 +555,7 @@ static int aes_probe(struct platform_device *pdev)
 	return 0;
 }
 
+
 static int aes_remove(struct platform_device *pdev)
 {
 	/* This must be done before anything else to be sure that no users call
@@ -564,11 +582,11 @@ static int aes_remove(struct platform_device *pdev)
 	return 0;
 }
 
+
 static const struct of_device_id aes_id_table[] = {
 	{.compatible = "stcmtk,aes"},
 	{}
 };
-
 MODULE_DEVICE_TABLE(of, aes_id_table);
 
 static struct platform_driver aes_drv = {
@@ -579,7 +597,6 @@ static struct platform_driver aes_drv = {
 		.of_match_table = aes_id_table,
 	}
 };
-
 module_platform_driver(aes_drv);
 
 MODULE_AUTHOR("Denis Gabidullin");
