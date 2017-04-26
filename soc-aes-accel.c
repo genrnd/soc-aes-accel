@@ -74,7 +74,7 @@ struct aes_priv {
 	 */
 
 	wait_queue_head_t irq_queue;
-	int irq_done;
+	atomic_t irq_done;
 
 	struct sg_table dst_table;
 	struct page *dst_page;
@@ -349,7 +349,7 @@ static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 
 	fpga_write_iv(desc->info, hw);
 
-	priv->irq_done = 0;
+	atomic_set(&priv->irq_done, 0);
 
 	sg_init_table(src_sg, SG_MAX_SIZE);
 	sg_init_table(dst_sg, SG_MAX_SIZE);
@@ -383,7 +383,7 @@ static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	sg_feed_all(src_sg, dst_sg, hw);
 
 	/* Wait for completion interrupt */
-	err = wait_event_interruptible(priv->irq_queue, priv->irq_done == 1);
+	err = wait_event_interruptible(priv->irq_queue, atomic_read(&priv->irq_done));
 	if (err) {
 		printk(KERN_ERR "wait_event_interruptible failed.\n");
 		return err;
@@ -446,7 +446,7 @@ static irqreturn_t fpga_isr(int irq, void *dev_id)
 {
 	struct aes_priv *priv = dev_id;
 
-	priv->irq_done = 1;
+	atomic_set(&priv->irq_done, 1);
 	wake_up_interruptible(&priv->irq_queue);
 
 	return IRQ_HANDLED;
