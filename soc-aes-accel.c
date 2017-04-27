@@ -99,25 +99,30 @@ struct aes_priv *priv;
 
 
 static int fpga_write_desc(struct netdma_regs __iomem *regs,
-		u32 dma_address, u16 length, u8 irq_is_en, bool is_dst)
+		u32 dma_address, u16 length, u8 irq_is_en, bool is_dst, bool is_enc)
 {
 	u32 control_field;
 
 	control_field = (length << DESC_BYTECOUNT_OFFSET) |
 	    (!irq_is_en << DESC_DISABLE_IRQ_OFFSET);
 
-	if (ioread32(&regs->status) & (is_dst ? STAT_RX_DESC_BUFFER_FULL : STAT_TX_DESC_BUFFER_FULL ))
+	if (ioread32(&regs->status) & (is_dst ? STAT_RX_DESC_BUFFER_FULL : STAT_TX_DESC_BUFFER_FULL )) {
 		/* We have determined empirically that it takes ~2200-2300
-		 * usecs for FPGA to process full FIFO of 63 descriptors (where
-		 * each descriptor points to buffer of 4096 bytes).
+		 * usecs for FPGA to encrypt full FIFO of 63 descriptors (where
+		 * each descriptor points to buffer of 4096 bytes), and ~1100-1200
+		 * usecs to decrypt.
 		 *
-		 * This sleep waits until almost all descriptors in FPGA are
+		 * These sleeps wait until almost all descriptors in FPGA are
 		 * processed. The upper bound approximately equals to the time
 		 * needed for processing of full FIFO by FPGA. The lower bound
 		 * was chosen a bit smaller to allow scheduler to optimize
 		 * sleeping by wakeup coalesce.
 		 */
-		usleep_range(1900, 2200);
+		if (is_enc)
+			usleep_range(1900, 2200);
+		else
+			usleep_range(900, 1200);
+	}
 
 	// This check is really unnecessary because the usleep_range above is
 	// definitely enough for FPGA to process some registers.
@@ -306,7 +311,7 @@ static void sg_unmap_all(struct device *dev, struct scatterlist *sg,
 
 
 static void sg_feed_all(struct scatterlist *src, struct scatterlist *dst,
-		struct aes_priv_hwinfo *hw)
+		struct aes_priv_hwinfo *hw, bool is_enc)
 {
 	struct scatterlist *i, *j;
 	ssize_t src_fed, dst_fed;
@@ -336,7 +341,7 @@ static void sg_feed_all(struct scatterlist *src, struct scatterlist *dst,
 		irq_en = sg_is_last(sg) && is_dst;
 
 		err = fpga_write_desc(hw->dma_regs, sg->dma_address, sg->length,
-				irq_en, is_dst);
+				irq_en, is_dst, is_enc);
 		if (err)
 			pr_err("write_dst_desc failed: %d\n", err);
 	}
@@ -347,7 +352,7 @@ static void sg_feed_all(struct scatterlist *src, struct scatterlist *dst,
 
 static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 			struct scatterlist *src, unsigned int nbytes,
-			struct aes_priv_hwinfo *hw)
+			struct aes_priv_hwinfo *hw, bool is_enc)
 {
 	int err;
 	struct scatterlist *i;
@@ -395,7 +400,7 @@ static int fpga_crypt(struct blkcipher_desc *desc, struct scatterlist *dst,
 	sg_map_all(priv->dev, dst_sg, DMA_FROM_DEVICE);
 
 	/* Start decryption by writing descriptors */
-	sg_feed_all(src_sg, dst_sg, hw);
+	sg_feed_all(src_sg, dst_sg, hw, is_enc);
 
 	/* Wait for completion interrupt */
 	err = wait_event_interruptible(priv->irq_queue, atomic_read(&priv->irq_done));
@@ -422,7 +427,7 @@ static int fpga_encrypt(struct blkcipher_desc *desc,
 			struct scatterlist *dst,
 			struct scatterlist *src, unsigned int nbytes)
 {
-	return fpga_crypt(desc, dst, src, nbytes, &priv->enc);
+	return fpga_crypt(desc, dst, src, nbytes, &priv->enc, true);
 }
 
 
@@ -430,7 +435,7 @@ static int fpga_decrypt(struct blkcipher_desc *desc,
 			struct scatterlist *dst,
 			struct scatterlist *src, unsigned int nbytes)
 {
-	return fpga_crypt(desc, dst, src, nbytes, &priv->dec);
+	return fpga_crypt(desc, dst, src, nbytes, &priv->dec, false);
 }
 
 
