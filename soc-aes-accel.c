@@ -106,7 +106,22 @@ static int fpga_write_desc(struct netdma_regs __iomem *regs,
 	control_field = (length << DESC_BYTECOUNT_OFFSET) |
 	    (!irq_is_en << DESC_DISABLE_IRQ_OFFSET);
 
-	while (ioread32(&regs->status) & (is_dst ? STAT_RX_DESC_BUFFER_FULL : STAT_TX_DESC_BUFFER_FULL ));
+	if (ioread32(&regs->status) & (is_dst ? STAT_RX_DESC_BUFFER_FULL : STAT_TX_DESC_BUFFER_FULL ))
+		/* We have determined empirically that it takes ~2200-2300
+		 * usecs for FPGA to process full FIFO of 63 descriptors (where
+		 * each descriptor points to buffer of 4096 bytes).
+		 *
+		 * This sleep waits until almost all descriptors in FPGA are
+		 * processed. The upper bound approximately equals to the time
+		 * needed for processing of full FIFO by FPGA. The lower bound
+		 * was chosen a bit smaller to allow scheduler to optimize
+		 * sleeping by wakeup coalesce.
+		 */
+		usleep_range(1900, 2200);
+
+	// This check is really unnecessary because the usleep_range above is
+	// definitely enough for FPGA to process some registers.
+	// BIG_ON(ioread32(&regs->status) & (is_dst ? STAT_RX_DESC_BUFFER_FULL : STAT_TX_DESC_BUFFER_FULL ));
 
 	if (is_dst) {
 		iowrite32(dma_address, &regs->dst_desc);
