@@ -12,8 +12,6 @@ FILES
 -----
 
  * `soc-aes-accel.c` -- the driver source code
- * `socfpga_cyclone5_etln.dts` -- sample DTS file containing description of
-   platform device handled by the driver
  * `tools/` -- Userspace utilities for testing and benchmarking the driver
 
 BUILD
@@ -73,22 +71,6 @@ Note that:
    * encryption DMA core registers
  * the `reg-names` property is optional. You may set it to influence the
    contents of /proc/iomem, it has no effect on driver behaviour.
-
-STC Metortek's SoC-based devices are shipped with custom FPGA manager driver
-(`etn-fpga-mgr.ko`) installed while the upstream Altera's FPGA manager (called
-`altera.ko` or `socfpga.ko`) device's node is disabled in dts. The Metrotek's
-FPGA manager driver requires the FPGA firmware to have a special capability
-called 'features'.
-
-At the moment of writing `soc-aes-accel` the firmware providing hardware
-AES decryption accelerator device did not have 'features'. In order to run the
-firmware properly one has to disable the device handled by Metrotek's FPGA
-manager and enable Altera FPGA manager's device.
-
-The `socfpga_cyclone5_etln.dts` file provided here enables Altera's FPGA
-manager and describes the device tree node for the device handled by
-`soc-aes-accel`. It is applicable for ETL-N and can be used as a
-reference for writing other device tree specifications.
 
 USAGE
 -----
